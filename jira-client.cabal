@@ -21,8 +21,11 @@ library
                      , bytestring
                      , lens
                      , lens-aeson
+                     , http-types
                      , mtl
                      , string-conv
+                     , stringsearch
+                     , text
                      , wreq
   default-language:    Haskell2010
 
