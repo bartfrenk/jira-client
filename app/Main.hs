@@ -14,10 +14,9 @@ import qualified Data.Aeson             as JSON
 import qualified Data.ByteString.Char8  as BS
 import           Data.Conduit
 import qualified Data.Conduit.List      as CL
-import           Data.List              (transpose)
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as Map
-import           Data.Maybe             (fromMaybe)
+import           Data.Maybe             (fromMaybe, maybe)
 import           Data.Semigroup         ((<>))
 import           Data.String.Conv
 import           Data.Text              (Text)
@@ -27,9 +26,6 @@ import           GHC.Generics
 import           Options.Applicative
 import           Prelude                hiding (log)
 import           System.Environment     (getArgs, lookupEnv)
-import           Text.PrettyPrint.Boxes (Box, hsep, left, para, text, vcat,
-                                         (<+>))
-import qualified Text.PrettyPrint.Boxes as Box
 
 import           JIRA
 
@@ -50,13 +46,13 @@ expandRefs refs jql@(JQL t) =
     ["jql", key] -> fromMaybe jql (Map.lookup key refs)
     _            -> jql
 
-getEnv :: Config -> Env
-getEnv Config{..} = Env
+getJiraEnv :: Config -> Env
+getJiraEnv Config{..} = Env
   { user = toS user, password = toS password, baseURL = toS baseURL }
 
 search :: Config -> SearchOptions -> IO ()
 search cfg@Config{..} SearchOptions{..} = do
-  let env = getEnv cfg
+  let env = getJiraEnv cfg
   let conduit = issueSearch (expandRefs queries jql) $= printer
   runEnv (runConduit conduit) env
 
@@ -66,7 +62,10 @@ printer = CL.mapM_ (liftIO . putStrLn . toS . formatIssue)
 -- TODO: should go in separate formatter module
 -- TODO: should make use of builder for performance
 formatIssue :: Issue -> Text
-formatIssue issue = key issue <> "\t" <> summary issue
+formatIssue issue =
+     key issue <> "\t"
+  <> maybe "-" (toS . show) (points issue) <> "\t"
+  <> summary issue
 
 searchOptions :: Parser SearchOptions
 searchOptions = SearchOptions . toS <$> strOption (short 'q' <>

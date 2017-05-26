@@ -18,6 +18,7 @@ library
   exposed-modules:     JIRA
   build-depends:       base >= 4.7 && < 5
                      , aeson
+                     , aeson-pretty
                      , boxes
                      , bytestring
                      , conduit

@@ -50,6 +50,7 @@ data Issue = Issue
   { key     :: Text
   , id      :: Text
   , summary :: Text
+  , points  :: Maybe Double
   } deriving (Eq, Show, Generic)
 
 instance FromJSON Issue where
@@ -57,6 +58,7 @@ instance FromJSON Issue where
       <$> v .: "key"
       <*> v .: "id"
       <*> ((v .: "fields") >>= (.: "summary"))
+      <*> ((v .: "fields") >>= (.: "customfield_10002"))
 
 instance ToJSON Issue
 
@@ -85,22 +87,22 @@ withCredentials opts = do
 issueSearch :: JQL -> Source EnvM Issue
 issueSearch jql = loop 0
   where
-    issuesLens = J.key "issues" . J.values . J._JSON
     limit = 200
     loop offset = do
-      response <- lift $ fetchIssues jql offset limit
-      let issues = response ^.. issuesLens
+      issues <- lift $ fetchIssues jql offset limit
       mapM_ yield issues
       unless (null issues) $
         loop (offset + length issues)
 
-fetchIssues :: JQL -> Int -> Int -> EnvM ByteString
+fetchIssues :: (FromJSON a, ToJSON a) => JQL -> Int -> Int -> EnvM [a]
 fetchIssues (JQL t) offset limit =
   let query = [("jql", Just $ toS t),
-               ("fields", Just "key,summary"),
+               -- customfield_10002 is story points for the LemonPI instance
+               ("fields", Just "key,summary,issuetype,customfield_10002"),
                ("startAt", Just $ toS $ show offset),
                ("maxResults", Just $ toS $ show limit)]
-  in fromJIRA GET "/search" query
+      issues = J.key "issues" . J.values . J._JSON
+  in toListOf issues <$> fromJIRA GET "/search" query
 
 replace :: Char -> Char -> ByteString -> ByteString
 replace old new = C8.map (\c -> if c == old then new else c)
@@ -116,3 +118,15 @@ fromJIRA method path query = do
   url <- createURL path query
   response <- liftIO $ customMethodWith (show method) opts (toS url)
   return $ response ^. responseBody . strict
+
+me = Env
+  { user = "bart.frenk"
+  , password = "!_h!Cb72W4"
+  , baseURL = "http://camelot.bluemango.nl/rest/api/2"
+  }
+
+qu = JQL "sprint in openSprints()\
+         \and sprint not in futureSprints()\
+         \and project=LemonPI"
+
+fields = "status.name, components, issuetype.name"
