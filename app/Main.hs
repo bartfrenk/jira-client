@@ -6,26 +6,30 @@
 {-# LANGUAGE TypeSynonymInstances  #-}
 module Main where
 
+
+import           Control.Monad          (join)
+import           Control.Monad.IO.Class (liftIO)
 import           Data.Aeson             (withObject, (.:))
 import qualified Data.Aeson             as JSON
 import qualified Data.ByteString.Char8  as BS
+import           Data.Conduit
+import qualified Data.Conduit.List      as CL
+import           Data.List              (transpose)
 import           Data.Map.Strict        (Map)
 import qualified Data.Map.Strict        as Map
 import           Data.Maybe             (fromMaybe)
 import           Data.Semigroup         ((<>))
-import           GHC.Generics
-import           Options.Applicative
-import           Prelude                hiding (log)
-
-import           Control.Monad          (join)
 import           Data.String.Conv
 import           Data.Text              (Text)
 import qualified Data.Text              as Text
 import qualified Data.Yaml              as YAML
+import           GHC.Generics
+import           Options.Applicative
+import           Prelude                hiding (log)
 import           System.Environment     (getArgs, lookupEnv)
+import           Text.PrettyPrint.Boxes (Box, hsep, left, para, text, vcat,
+                                         (<+>))
 import qualified Text.PrettyPrint.Boxes as Box
-import Text.PrettyPrint.Boxes (Box, (<+>), hsep, left, text, vcat, para)
-import Data.List (transpose)
 
 import           JIRA
 
@@ -53,18 +57,16 @@ getEnv Config{..} = Env
 search :: Config -> SearchOptions -> IO ()
 search cfg@Config{..} SearchOptions{..} = do
   let env = getEnv cfg
-  issues <- runEnv (searchIssues (expandRefs queries jql)) env
-  Box.printBox (formatIssues issues)
+  let conduit = issueSearch (expandRefs queries jql) $= printer
+  runEnv (runConduit conduit) env
 
-formatIssues :: [Issue] -> Box
-formatIssues issues =
-  let fmtRow issue = [text $ toS $ key issue,
-                      text $ toS $ summary issue]
-  in fmtTable ["Issue", "Summary"] $ fmtRow <$> issues
+printer :: Sink Issue EnvM ()
+printer = CL.mapM_ (liftIO . putStrLn . toS . formatIssue)
 
-fmtTable :: [Text] -> [[Box]] -> Box
-fmtTable headers rows =
-  hsep 2 left (map (vcat left) (transpose ((map (text . toS) headers):rows)))
+-- TODO: should go in separate formatter module
+-- TODO: should make use of builder for performance
+formatIssue :: Issue -> Text
+formatIssue issue = key issue <> "\t" <> summary issue
 
 searchOptions :: Parser SearchOptions
 searchOptions = SearchOptions . toS <$> strOption (short 'q' <>

@@ -9,8 +9,7 @@
 
 module JIRA (runEnv,
              fromJIRA,
-             searchIssues,
-             issuesInCurrentSprint,
+             issueSearch,
              EnvM,
              Env(..),
              Issue(..),
@@ -23,6 +22,7 @@ import           Data.Aeson
 import qualified Data.Aeson.Lens        as J
 import           Data.ByteString        (ByteString)
 import qualified Data.ByteString.Char8  as C8
+import           Data.Conduit           (Source, yield)
 import           Data.Monoid
 import           Data.String.Conv
 import           Data.Text              (Text)
@@ -30,24 +30,6 @@ import           GHC.Generics
 import           Network.HTTP.Types
 import           Network.Wreq
 import           Prelude                hiding (log)
-
-data Env = Env
-  { user     :: ByteString
-  , password :: ByteString
-  , baseURL  :: ByteString
-  }
-
-type EnvM = ReaderT Env IO
-
-runEnv :: EnvM a -> Env -> IO a
-runEnv = runReaderT
-
-withCredentials :: MonadReader Env m => Options -> m Options
-withCredentials opts = do
-  user' <- reader user
-  password' <- reader password
-  return $ opts & auth ?~ basicAuth user' password'
-                & header "Content-Type" .~ ["application/json"]
 
 newtype JQL = JQL Text deriving (Eq, Show)
 
@@ -60,7 +42,9 @@ instance StringConv String JQL where
 instance StringConv JQL ByteString where
   strConv leniency (JQL t) = strConv leniency t
 
+
 type Path = ByteString
+
 
 data Issue = Issue
   { key     :: Text
@@ -76,17 +60,47 @@ instance FromJSON Issue where
 
 instance ToJSON Issue
 
-searchIssues :: JQL -> EnvM [Issue]
-searchIssues (JQL t) =
-  let query = [("jql", Just $ toS t), ("fields", Just "key,summary")]
-      issues = J.key "issues" . J.values . J._JSON
-  in toListOf issues <$> fromJIRA GET "/search" query
 
-issuesInCurrentSprint :: EnvM [Issue]
-issuesInCurrentSprint = searchIssues $
-  JQL "sprint in openSprints() \
-      \and sprint not in futureSprints() \
-      \and project=LemonPI"
+data Env = Env
+  { user     :: ByteString
+  , password :: ByteString
+  , baseURL  :: ByteString
+  }
+
+type EnvT = ReaderT Env
+
+type EnvM = EnvT IO
+
+
+runEnv :: EnvT m a -> Env -> m a
+runEnv = runReaderT
+
+withCredentials :: MonadReader Env m => Options -> m Options
+withCredentials opts = do
+  user' <- reader user
+  password' <- reader password
+  return $ opts & auth ?~ basicAuth user' password'
+                & header "Content-Type" .~ ["application/json"]
+
+issueSearch :: JQL -> Source EnvM Issue
+issueSearch jql = loop 0
+  where
+    issuesLens = J.key "issues" . J.values . J._JSON
+    limit = 200
+    loop offset = do
+      response <- lift $ fetchIssues jql offset limit
+      let issues = response ^.. issuesLens
+      mapM_ yield issues
+      unless (null issues) $
+        loop (offset + length issues)
+
+fetchIssues :: JQL -> Int -> Int -> EnvM ByteString
+fetchIssues (JQL t) offset limit =
+  let query = [("jql", Just $ toS t),
+               ("fields", Just "key,summary"),
+               ("startAt", Just $ toS $ show offset),
+               ("maxResults", Just $ toS $ show limit)]
+  in fromJIRA GET "/search" query
 
 replace :: Char -> Char -> ByteString -> ByteString
 replace old new = C8.map (\c -> if c == old then new else c)

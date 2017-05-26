@@ -20,6 +20,7 @@ library
                      , aeson
                      , boxes
                      , bytestring
+                     , conduit
                      , lens
                      , lens-aeson
                      , http-types
@@ -43,6 +44,7 @@ executable cli
                      , aeson
                      , boxes
                      , bytestring
+                     , conduit
                      , lens
                      , lens-aeson
                      , http-types
