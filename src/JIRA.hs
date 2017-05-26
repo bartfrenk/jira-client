@@ -118,15 +118,3 @@ fromJIRA method path query = do
   url <- createURL path query
   response <- liftIO $ customMethodWith (show method) opts (toS url)
   return $ response ^. responseBody . strict
-
-me = Env
-  { user = "bart.frenk"
-  , password = "!_h!Cb72W4"
-  , baseURL = "http://camelot.bluemango.nl/rest/api/2"
-  }
-
-qu = JQL "sprint in openSprints()\
-         \and sprint not in futureSprints()\
-         \and project=LemonPI"
-
-fields = "status.name, components, issuetype.name"
