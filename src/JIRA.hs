@@ -1,10 +1,20 @@
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-module Lib where
+{-# LANGUAGE TypeSynonymInstances  #-}
+
+module JIRA (runEnv,
+             fromJIRA,
+             searchIssues,
+             issuesInCurrentSprint,
+             EnvM,
+             Env(..),
+             Issue(..),
+             JQL(..)) where
 
 import           Control.Lens
 import           Control.Monad.IO.Class (liftIO)
@@ -21,30 +31,16 @@ import           Network.HTTP.Types
 import           Network.Wreq
 import           Prelude                hiding (log)
 
-
-
-data WorkLogLine = WorkLogLine
-  { timeSpent :: String
-  }
-
-url' :: String
-url' = "http://camelot.bluemango.nl/rest/api/2/issue/lemonpi-3220/worklog"
-
 data Env = Env
   { user     :: ByteString
   , password :: ByteString
   , baseURL  :: ByteString
   }
 
-defaultEnv :: Env
-defaultEnv = Env
-  { user = "bart.frenk"
-  , password = ""
-  , baseURL = "http://camelot.bluemango.nl/rest/api/2"
-  }
-
-
 type EnvM = ReaderT Env IO
+
+runEnv :: EnvM a -> Env -> IO a
+runEnv = runReaderT
 
 withCredentials :: MonadReader Env m => Options -> m Options
 withCredentials opts = do
@@ -53,19 +49,16 @@ withCredentials opts = do
   return $ opts & auth ?~ basicAuth user' password'
                 & header "Content-Type" .~ ["application/json"]
 
-log :: Issue -> WorkLogLine -> EnvM Status
-log _ _ = do
-  opts <- withCredentials defaults
-  response <- liftIO $ getWith opts url'
-  return $ response ^. responseStatus
+newtype JQL = JQL Text deriving (Eq, Show)
 
-getTotalTime :: EnvM Integer
-getTotalTime =
-  sum . toListOf times <$> fromJIRA GET "/issue/lemonpi-3220/worklog" []
-    where
-      times = J.key "worklogs" . J.values . J.key "timeSpentSeconds" . J._Integer
+instance FromJSON JQL where
+  parseJSON = (JQL <$>) . parseJSON
 
-type JQL = ByteString
+instance StringConv String JQL where
+  strConv leniency s = JQL $ strConv leniency s
+
+instance StringConv JQL ByteString where
+  strConv leniency (JQL t) = strConv leniency t
 
 type Path = ByteString
 
@@ -84,16 +77,16 @@ instance FromJSON Issue where
 instance ToJSON Issue
 
 searchIssues :: JQL -> EnvM [Issue]
-searchIssues jql =
-  let query = [("jql", Just jql), ("fields", Just "key,summary")]
+searchIssues (JQL t) =
+  let query = [("jql", Just $ toS t), ("fields", Just "key,summary")]
       issues = J.key "issues" . J.values . J._JSON
   in toListOf issues <$> fromJIRA GET "/search" query
 
 issuesInCurrentSprint :: EnvM [Issue]
-issuesInCurrentSprint = searchIssues "sprint in openSprints() \
-                                     \and sprint not in futureSprints() \
-                                     \and project=LemonPI"
-
+issuesInCurrentSprint = searchIssues $
+  JQL "sprint in openSprints() \
+      \and sprint not in futureSprints() \
+      \and project=LemonPI"
 
 replace :: Char -> Char -> ByteString -> ByteString
 replace old new = C8.map (\c -> if c == old then new else c)
