@@ -12,7 +12,9 @@ module JIRA (runEnv,
              issueSearch,
              log,
              IssueKey,
+             TimeSpent,
              EnvM,
+             WorkLog(..),
              Env(..),
              Issue(..),
              JQL(..)) where
@@ -49,6 +51,8 @@ instance StringConv JQL ByteString where
   strConv leniency (JQL t) = strConv leniency t
 
 type IssueKey = Text
+
+type TimeSpent = Text
 
 type Path = ByteString
 
@@ -135,16 +139,7 @@ data WorkLog = WorkLog
 
 $(deriveJSON defaultOptions { omitNothingFields = True } ''WorkLog)
 
-
 log :: IssueKey -> WorkLog -> EnvM ByteString
 log issueKey workLog = do
   path <- createURL ("/issue/" <> toS issueKey <> "/worklog") []
-  liftIO $ print path
   post path (encode workLog)
-
-me = Env
-  { user = "bart.frenk"
-  , password = "V1e79s!(_E"
-  , baseURL = "http://camelot.bluemango.nl/rest/api/2"
-  }
-
