@@ -30,6 +30,7 @@ library
                      , string-conv
                      , stringsearch
                      , text
+                     , time
                      , wreq
                      , yaml
   default-language:    Haskell2010

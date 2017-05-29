@@ -25,57 +25,66 @@ import qualified Data.Yaml              as YAML
 import           GHC.Generics
 import           Options.Applicative
 import           Prelude                hiding (log)
+import           Prelude                hiding (log)
 import           System.Environment     (getArgs, lookupEnv)
 
-import           JIRA
+import qualified JIRA as JIRA
 
-log :: IO ()
-log = putStrLn "stop"
+log :: Config -> LogOptions -> IO ()
+log cfg LogOptions{..} = undefined
+
 
 data SearchOptions = SearchOptions
-  { jql :: JQL
+  { jql :: JIRA.JQL
   } deriving (Eq, Show)
 
 data LogOptions = LogOptions
-  { issueKey :: Text
+  { issueKey  :: JIRA.IssueKey
+  , timeSpent :: Text
   }
 
-expandRefs :: Map Text JQL -> JQL -> JQL
-expandRefs refs jql@(JQL t) =
+expandRefs :: Map Text JIRA.JQL -> JIRA.JQL -> JIRA.JQL
+expandRefs refs jql@(JIRA.JQL t) =
   case Text.split (== ':') t of
     ["jql", key] -> fromMaybe jql (Map.lookup key refs)
     _            -> jql
 
-getJiraEnv :: Config -> Env
-getJiraEnv Config{..} = Env
+getJiraEnv :: Config -> JIRA.Env
+getJiraEnv Config{..} = JIRA.Env
   { user = toS user, password = toS password, baseURL = toS baseURL }
 
 search :: Config -> SearchOptions -> IO ()
 search cfg@Config{..} SearchOptions{..} = do
   let env = getJiraEnv cfg
-  let conduit = issueSearch (expandRefs queries jql) $= printer
-  runEnv (runConduit conduit) env
+  let conduit = JIRA.issueSearch (expandRefs queries jql) $= printer
+  JIRA.runEnv (runConduit conduit) env
 
-printer :: Sink Issue EnvM ()
+printer :: Sink JIRA.Issue JIRA.EnvM ()
 printer = CL.mapM_ (liftIO . putStrLn . toS . formatIssue)
 
 -- TODO: should go in separate formatter module
 -- TODO: should make use of builder for performance
-formatIssue :: Issue -> Text
+formatIssue :: JIRA.Issue -> Text
 formatIssue issue =
-     key issue <> "\t"
-  <> maybe "-" (toS . show) (points issue) <> "\t"
-  <> summary issue
+     JIRA.key issue <> "\t"
+  <> maybe "-" (toS . show) (JIRA.points issue) <> "\t"
+  <> JIRA.summary issue
 
 searchOptions :: Parser SearchOptions
 searchOptions = SearchOptions . toS <$> strOption (short 'q' <>
                                    metavar "QUERY" <>
                                    help "Search issues using a JQL query")
 
+logOptions :: Parser LogOptions
+logOptions = LogOptions
+  <$> argument txt (metavar "ISSUE" <> help "Help")
+  <*> argument txt (metavar "TIME" <> help "Help")
+  where txt = toS <$> str
+
 opts :: Config -> Parser (IO ())
 opts cfg = hsubparser (
     command "search" (info (search cfg <$> searchOptions) mempty)
- <> command "log"  (info (pure log) mempty))
+ <> command "log"  (info (log cfg <$> logOptions) mempty))
 
 type Aliases = Map Text [Text]
 
@@ -94,7 +103,7 @@ data Config = Config
   { baseURL  :: Text
   , password :: Text
   , user     :: Text
-  , queries  :: Map Text JQL
+  , queries  :: Map Text JIRA.JQL
   , aliases  :: Map Text [Text]
   } deriving (Eq, Show, Generic)
 
@@ -126,4 +135,4 @@ main = do
     Just cfg ->
       run cfg args
     Nothing  ->
-      putStrLn $ "Could not load configuration file at " ++ (toS path)
+      putStrLn $ "Could not load configuration file at " ++ toS path
