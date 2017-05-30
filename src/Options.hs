@@ -9,11 +9,13 @@ import qualified Data.Map.Strict     as M
 import           Data.Maybe          (fromMaybe)
 import           Data.Semigroup      ((<>))
 import           Data.String.Conv    (toS)
-import           Data.Text           hiding (words, index)
+import           Data.Text           hiding (index, words)
 import           Data.Typeable
 import qualified Data.Yaml           as YAML
 import           Options.Applicative hiding (execParser)
 import           Prelude             hiding (readFile)
+import           System.Directory    (getHomeDirectory)
+import           System.FilePath     ((</>))
 
 import qualified JIRA                as J
 
@@ -42,9 +44,10 @@ instance Exception ParseException
 
 loadOptions :: Maybe FilePath -> IO Options
 loadOptions path =
-  let defaultPath = "./res/config.yaml"
+  let defaultFile = ".jira-cli.yaml"
   in do
-    txt <- readFile (fromMaybe defaultPath path)
+    home <- getHomeDirectory
+    txt <- readFile (fromMaybe (home </> defaultFile) path)
     maybe (throwIO $ ParseException txt) return (YAML.decode txt)
 
 makeEnv :: Options -> J.Env
