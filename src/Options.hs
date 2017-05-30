@@ -9,7 +9,7 @@ import qualified Data.Map.Strict     as M
 import           Data.Maybe          (fromMaybe)
 import           Data.Semigroup      ((<>))
 import           Data.String.Conv    (toS)
-import           Data.Text           hiding (words)
+import           Data.Text           hiding (words, index)
 import           Data.Typeable
 import qualified Data.Yaml           as YAML
 import           Options.Applicative hiding (execParser)
@@ -18,11 +18,12 @@ import           Prelude             hiding (readFile)
 import qualified JIRA                as J
 
 data Options = Options
-  { baseURL  :: Text
-  , password :: Text
-  , user     :: Text
-  , queries  :: M.Map Text J.JQL
-  , aliases  :: M.Map String [String]
+  { baseURL        :: Text
+  , password       :: Text
+  , user           :: Text
+  , defaultProject :: Text
+  , queries        :: M.Map Text J.JQL
+  , aliases        :: M.Map String [String]
   } deriving (Eq, Show)
 
 instance YAML.FromJSON Options where
@@ -30,6 +31,7 @@ instance YAML.FromJSON Options where
     <$> v .: "baseURL"
     <*> v .: "password"
     <*> v .: "user"
+    <*> v .: "defaultProject"
     <*> v .: "jql"
     <*> (words <$>) `fmap` (v .: "aliases")
 
@@ -59,21 +61,23 @@ parseSearch :: Parser Command
 parseSearch = Search <$> argument jql (metavar "QUERY")
   where jql = J.JQL . toS <$> str
 
-parseLog :: Parser Command
-parseLog = Log
+parseLog :: Text -> Parser Command
+parseLog prefix = Log
   <$> argument issueKey (metavar "ISSUE")
   <*> argument timeSpent (metavar "TIME-SPENT")
-  where issueKey = toS <$> str
+  where index = toS . show <$> (auto :: ReadM Int)
+        issueKey =  (prefix <>) <$> index <|> toS <$> str
         timeSpent = toS <$> str
 
 withInfo :: Parser a -> String -> ParserInfo a
 withInfo p desc = p `info` progDesc desc
 
-parseCommand :: Parser Command
-parseCommand = hsubparser $
+parseCommand :: Options -> Parser Command
+parseCommand opts = hsubparser $
   command "search" (parseSearch `withInfo` "Search issues") <>
-  command "log"    (parseLog `withInfo` "Create a new work log entry")
+  command "log"    (parseLog prefix `withInfo` "Create a new work log entry")
+  where prefix = defaultProject opts <> "-"
 
-runParser :: [String] -> IO Command
-runParser args = handleParseResult $ execParserPure defaultPrefs p args
-  where p = parseCommand `info` idm
+runParser :: Options -> [String] -> IO Command
+runParser opts args = handleParseResult $ execParserPure defaultPrefs p args
+  where p = parseCommand opts `info` idm

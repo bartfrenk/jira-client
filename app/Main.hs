@@ -59,5 +59,5 @@ main :: IO ()
 main = do
   opts <- loadOptions =<< lookupEnv "JIRA_CLIENT_CONFIG"
   args <- getArgs
-  cmd <- runParser $ expand (aliases opts) args
+  cmd <- runParser opts $ expand (aliases opts) args
   run opts cmd
