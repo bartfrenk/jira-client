@@ -4,6 +4,7 @@
 ## Features
 
 - Add functionality to see work log for tickets in search result
+- See epic in ticket search results
 
 ## Improvements
 
