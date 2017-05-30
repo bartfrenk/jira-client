@@ -61,12 +61,12 @@ data Command
   | Log J.IssueKey J.TimeSpent
 
 parseSearch :: Parser Command
-parseSearch = Search <$> argument jql (metavar "QUERY")
+parseSearch = Search <$> argument jql (metavar "JQL-QUERY")
   where jql = J.JQL . toS <$> str
 
 parseLog :: Text -> Parser Command
 parseLog prefix = Log
-  <$> argument issueKey (metavar "ISSUE")
+  <$> argument issueKey (metavar "ISSUE-KEY")
   <*> argument timeSpent (metavar "TIME-SPENT")
   where index = toS . show <$> (auto :: ReadM Int)
         issueKey =  (prefix <>) <$> index <|> toS <$> str
@@ -83,4 +83,5 @@ parseCommand opts = hsubparser $
 
 runParser :: Options -> [String] -> IO Command
 runParser opts args = handleParseResult $ execParserPure defaultPrefs p args
-  where p = parseCommand opts `info` idm
+  where p = (helper <*> parseCommand opts) `info`
+            (fullDesc <> progDesc "JIRA command line client")
