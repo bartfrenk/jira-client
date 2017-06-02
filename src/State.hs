@@ -17,7 +17,7 @@ import Core
 
 type Log = [LogLine]
 
-data LogLine = LogLine
+data LogLine = Started
   { activeIssueKey :: J.IssueKey
   , started        :: UTCTime
   } deriving (Eq, Show, Generic)

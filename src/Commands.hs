@@ -14,6 +14,7 @@ data Command
   = Search J.JQL
   | Log J.IssueKey J.TimeSpent
   | Start J.IssueKey
+  | Review
 
 -- | If a number, read number and prepend prefix, otherwise read full issue key.
 readIssueKey :: Text -> ReadM J.IssueKey
@@ -28,6 +29,9 @@ parseStart :: Text -> Parser Command
 parseStart prefix =
   Start <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
 
+parseReview :: Parser Command
+parseReview = pure Review
+
 parseLog :: Text -> Parser Command
 parseLog prefix = Log
   <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
@@ -41,7 +45,8 @@ parseCommand :: Options -> Parser Command
 parseCommand opts = hsubparser $
   command "search" (parseSearch `withInfo` "Search issues") <>
   command "log"    (parseLog prefix `withInfo` "Create a new work log entry") <>
-  command "start"  (parseStart prefix `withInfo` "Start work on an issue")
+  command "start"  (parseStart prefix `withInfo` "Start work on an issue") <>
+  command "review" (parseReview `withInfo` "Review logged work")
   where prefix = defaultProject opts <> "-"
 
 runParser :: Options -> [String] -> IO Command

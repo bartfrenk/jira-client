@@ -24,6 +24,7 @@ action :: Command -> CommandM (Maybe String)
 action (Search jql)             = search jql
 action (Log issueKey timeSpent) = log issueKey timeSpent
 action (Start issueKey)         = start issueKey
+action Review                   = review
 
 run :: Command -> Options -> IO (Either Failure (Maybe String))
 run cmd opts = do
@@ -38,9 +39,9 @@ putDocLn doc = do
   putStrLn ""
 
 printResult :: Either Failure (Maybe String) -> IO ()
-printResult (Left txt) = putDocLn $ P.red (P.text txt)
+printResult (Left txt)         = putDocLn $ P.red (P.text txt)
 printResult (Right (Just txt)) = putDocLn (P.text txt)
-printResult (Right Nothing) = return ()
+printResult (Right Nothing)    = return ()
 
 main :: IO ()
 main = do

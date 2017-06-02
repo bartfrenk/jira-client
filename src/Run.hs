@@ -72,6 +72,11 @@ start issueKey = do
   exists <- runWithOptions (J.issueExists issueKey)
   if exists then do
     now <- liftIO getCurrentTime
-    modify (<> [LogLine issueKey now])
+    modify (<> [Started issueKey now])
     return $ Just $ "Started working on " <> toS issueKey
   else throwError (toS issueKey <> " does not exists")
+
+review :: CommandM (Maybe String)
+review = do
+  get >>= liftIO . mapM_ print
+  return Nothing
