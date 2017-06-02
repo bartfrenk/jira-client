@@ -67,16 +67,22 @@ formatIssue issue =
   <> maybe "-" (toS . show) (J.points issue) <> "\t"
   <> J.summary issue
 
+-- TODO: check whether we are already working on requested issue Would be better
+-- to have good equality on IssueKey, for example by representing it as a
+-- product of normalized project name, and a number.
+-- TODO: allow comments, or
+-- maybe categories of work: i.e. code-review, development
 start :: J.IssueKey -> CommandM (Maybe String)
 start issueKey = do
   exists <- runWithOptions (J.issueExists issueKey)
   if exists then do
     now <- liftIO getCurrentTime
-    modify (<> [Started issueKey now])
+    modify (<> [LogLine now (Started issueKey)])
     return $ Just $ "Started working on " <> toS issueKey
   else throwError (toS issueKey <> " does not exists")
 
 review :: CommandM (Maybe String)
 review = do
-  get >>= liftIO . mapM_ print
+  (worklog, _) <- toWorkLog <$> get
+  liftIO $ mapM_ print worklog
   return Nothing

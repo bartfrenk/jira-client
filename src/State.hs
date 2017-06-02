@@ -1,26 +1,43 @@
 {-# LANGUAGE DeriveGeneric #-}
 module State where
 
-import Data.Maybe (fromMaybe)
-import Control.Exception (throwIO)
+import           Control.Exception (throwIO)
+import           Data.ByteString   (readFile, writeFile)
+import           Data.Maybe        (fromMaybe)
+import           Data.Time.Clock
+import           Data.Yaml         as YAML
+import           GHC.Generics
+import           Prelude           hiding (readFile, writeFile, log)
+import           System.Directory  (doesFileExist, getHomeDirectory)
+import           System.FilePath   ((</>))
 
-import Data.ByteString (readFile, writeFile)
-import Prelude hiding (readFile, writeFile)
-import Data.Time.Clock
-import GHC.Generics
-import Data.Yaml as YAML
-import           System.Directory    (getHomeDirectory, doesFileExist)
-import           System.FilePath     ((</>))
-
-import JIRA as J
-import Core
+import           Core
+import qualified JIRA              as J
 
 type Log = [LogLine]
 
-data LogLine = Started
-  { activeIssueKey :: J.IssueKey
-  , started        :: UTCTime
-  } deriving (Eq, Show, Generic)
+data LogLineType = Started J.IssueKey | Stopped
+  deriving (Eq, Show, Generic)
+
+instance FromJSON LogLineType
+instance ToJSON LogLineType
+
+data LogLine = LogLine UTCTime LogLineType
+  deriving (Eq, Show, Generic)
+
+
+diffToSeconds :: UTCTime -> UTCTime -> Integer
+diffToSeconds t s =
+  let secs = realToFrac $ diffUTCTime t s :: Double
+  in truncate secs
+
+toWorkLog :: Log -> ([(J.IssueKey, J.WorkLog)], Log)
+toWorkLog (LogLine s (Started key) : end@(LogLine t _) : rest) =
+  let (wl, log) = toWorkLog (end:rest)
+      sec = diffToSeconds t s
+  in ((key, J.WorkLog (J.TimeSpentSeconds sec) (Just s)):wl, log)
+toWorkLog (_:rest) = toWorkLog rest
+toWorkLog [] = ([], [])
 
 instance FromJSON LogLine
 instance ToJSON LogLine
