@@ -1,22 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
-module Options where
+module Options (Options(..),
+                loadOptions,
+                makeEnv) where
 
 import           Control.Exception
 import           Data.Aeson          (withObject, (.:))
-import           Data.ByteString     (ByteString, readFile)
+import           Data.ByteString     (readFile)
 import qualified Data.Map.Strict     as M
 import           Data.Maybe          (fromMaybe)
-import           Data.Semigroup      ((<>))
 import           Data.String.Conv    (toS)
 import           Data.Text           hiding (index, words)
-import           Data.Typeable
 import qualified Data.Yaml           as YAML
-import           Options.Applicative hiding (execParser)
+import           Options.Applicative hiding (execParser, runParser)
 import           Prelude             hiding (readFile)
 import           System.Directory    (getHomeDirectory)
 import           System.FilePath     ((</>))
 
+import           Core
 import qualified JIRA                as J
 
 data Options = Options
@@ -37,14 +38,9 @@ instance YAML.FromJSON Options where
     <*> v .: "jql"
     <*> (words <$>) `fmap` (v .: "aliases")
 
-data ParseException = ParseException ByteString
-  deriving (Show, Typeable)
-
-instance Exception ParseException
-
 loadOptions :: Maybe FilePath -> IO Options
 loadOptions path =
-  let defaultFile = ".jira-cli.yaml"
+  let defaultFile = ".jira-cli/config.yaml"
   in do
     home <- getHomeDirectory
     txt <- readFile (fromMaybe (home </> defaultFile) path)
@@ -56,32 +52,3 @@ makeEnv Options{..} = J.Env
   , password = toS password
   , baseURL = toS baseURL }
 
-data Command
-  = Search J.JQL
-  | Log J.IssueKey J.TimeSpent
-
-parseSearch :: Parser Command
-parseSearch = Search <$> argument jql (metavar "JQL-QUERY")
-  where jql = J.JQL . toS <$> str
-
-parseLog :: Text -> Parser Command
-parseLog prefix = Log
-  <$> argument issueKey (metavar "ISSUE-KEY")
-  <*> argument timeSpent (metavar "TIME-SPENT")
-  where index = toS . show <$> (auto :: ReadM Int)
-        issueKey =  (prefix <>) <$> index <|> toS <$> str
-        timeSpent = toS <$> str
-
-withInfo :: Parser a -> String -> ParserInfo a
-withInfo p desc = p `info` progDesc desc
-
-parseCommand :: Options -> Parser Command
-parseCommand opts = hsubparser $
-  command "search" (parseSearch `withInfo` "Search issues") <>
-  command "log"    (parseLog prefix `withInfo` "Create a new work log entry")
-  where prefix = defaultProject opts <> "-"
-
-runParser :: Options -> [String] -> IO Command
-runParser opts args = handleParseResult $ execParserPure defaultPrefs p args
-  where p = (helper <*> parseCommand opts) `info`
-            (fullDesc <> progDesc "JIRA command line client")

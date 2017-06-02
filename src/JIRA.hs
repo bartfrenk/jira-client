@@ -5,41 +5,51 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
 module JIRA (runEnv,
              issueSearch,
+             issueExists,
              log,
              IssueKey,
-             TimeSpent,
+             TimeSpent(..),
              EnvM,
              WorkLog(..),
              Env(..),
              Issue(..),
              JQL(..)) where
 
+import           Control.Exception             (throwIO)
 import           Control.Lens
-import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.IO.Class        (liftIO)
 import           Control.Monad.Reader
 import           Data.Aeson
-import qualified Data.Aeson.Lens        as J
-import           Data.Aeson.TH          (deriveJSON, Options(..), defaultOptions)
-import           Data.ByteString        (ByteString)
-import qualified Data.ByteString.Char8  as C8
-import           Data.Conduit           (Source, yield)
+import qualified Data.Aeson.Lens               as J
+import           Data.Aeson.Types              (typeMismatch)
+import           Data.ByteString               (ByteString)
+import qualified Data.ByteString.Char8         as C8
+import qualified Data.ByteString.Lazy.Internal as L
+import           Data.Conduit                  (Source, yield)
+import qualified Data.HashMap.Lazy             as M
+import           Data.Maybe                    (maybeToList)
 import           Data.Monoid
+import           Data.Scientific
 import           Data.String.Conv
-import           Data.Text              (Text)
+import           Data.Text                     (Text)
 import           Data.Time.Clock
 import           GHC.Generics
-import           Network.HTTP.Types
-import           Network.Wreq           hiding (get, post)
-import qualified Network.Wreq           as W
-import           Network.Wreq.Types     (Postable)
-import           Prelude                hiding (log)
+import           Network.HTTP.Client           (HttpException (..),
+                                                HttpExceptionContent (..))
+import           Network.HTTP.Types            (Query, renderQuery, urlDecode)
+import           Network.Wreq                  hiding (get, post)
+import qualified Network.Wreq                  as W
+import           Network.Wreq.Types            (Postable)
+import           Prelude                       hiding (log)
 
 newtype JQL = JQL Text deriving (Eq, Show)
+
 
 instance FromJSON JQL where
   parseJSON = (JQL <$>) . parseJSON
@@ -52,7 +62,23 @@ instance StringConv JQL ByteString where
 
 type IssueKey = Text
 
-type TimeSpent = Text
+-- TODO: smart constructor that only allows valid values:
+-- value for timeSpentSeconds must be larger than 60
+data TimeSpent
+  = TimeSpentCode Text
+  | TimeSpentSeconds Integer
+  deriving (Show)
+
+instance ToJSON TimeSpent where
+  toJSON (TimeSpentCode txt)    = toJSON txt
+  toJSON (TimeSpentSeconds sec) = toJSON sec
+
+instance FromJSON TimeSpent where
+  parseJSON (String txt) = return $ TimeSpentCode txt
+  parseJSON v@(Number sci) = if isInteger sci
+    then return $ TimeSpentSeconds $ truncate sci
+    else typeMismatch "Time in seconds should be an integer" v
+  parseJSON v            = typeMismatch "Invalid time specification" v
 
 type Path = ByteString
 
@@ -109,8 +135,8 @@ fetchIssues (JQL t) offset limit =
                ("fields", Just "key,summary,issuetype,customfield_10002"),
                ("startAt", Just $ toS $ show offset),
                ("maxResults", Just $ toS $ show limit)]
-      issues = J.key "issues" . J.values . J._JSON
-  in toListOf issues <$> (get =<< createURL "/search" query)
+      issues = responseBody . J.key "issues" . J.values . J._JSON
+  in toListOf issues <$> (get defaults =<< createURL "/search" query)
 
 replace :: Char -> Char -> ByteString -> ByteString
 replace old new = C8.map (\c -> if c == old then new else c)
@@ -120,11 +146,11 @@ createURL path query =
   let queryString = replace ' ' '+' $ urlDecode False (renderQuery True query)
   in (<> path <> queryString) <$> reader baseURL
 
-get :: Path -> EnvM ByteString
-get url = do
-  opts <- withCredentials defaults
-  response <- liftIO $ getWith opts (toS url)
-  return $ response ^. responseBody . strict
+-- TODO: pull in createURL
+get :: Options -> Path -> EnvM (Response L.ByteString)
+get base url = do
+  opts <- withCredentials base
+  liftIO $ getWith opts (toS url)
 
 post :: Postable a => Path -> a -> EnvM ByteString
 post url payload = do
@@ -133,11 +159,37 @@ post url payload = do
   return $ response ^. responseBody . strict
 
 data WorkLog = WorkLog
-  { timeSpent :: Text
+  { timeSpent :: TimeSpent
   , started   :: Maybe UTCTime
-  } deriving (Eq, Show, Generic)
+  } deriving (Show, Generic)
 
-$(deriveJSON defaultOptions { omitNothingFields = True } ''WorkLog)
+
+-- TODO: check response
+issueExists :: IssueKey -> EnvM Bool
+issueExists issueKey = do
+  url <- createURL ("/issue/" <> toS issueKey) []
+  response <- get (defaults & checkResponse .~ Just ignore) url
+  case response ^. responseStatus . statusCode of
+    200 -> return True
+    _   -> return False
+  where mkException req resp =
+          HttpExceptionRequest req $ StatusCodeException (void resp) ""
+        ignore req resp =
+          case resp ^. responseStatus . statusCode of
+            200 -> return ()
+            404 -> return ()
+            _   -> throwIO $ mkException req resp
+
+instance ToJSON WorkLog where
+  toJSON WorkLog{..} =
+    Object $ M.fromList $ maybeToList
+    (("started",) . toJSON <$> started) ++
+    [
+      case timeSpent of
+        TimeSpentCode txt    -> ("timeSpent", toJSON txt)
+        TimeSpentSeconds sec -> ("timeSpentSeconds", toJSON sec)]
+
+-- $(deriveJSON defaultOptions { omitNothingFields = True } ''WorkLog)
 
 log :: IssueKey -> WorkLog -> EnvM ByteString
 log issueKey workLog = do
