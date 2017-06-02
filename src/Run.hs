@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RecordWildCards       #-}
 
 module Run where
 
@@ -13,8 +14,10 @@ import qualified Data.Map.Strict      as Map
 import           Data.Maybe           (fromMaybe, maybe)
 import           Data.Semigroup       ((<>))
 import           Data.String.Conv     (toS)
-import           Data.Text
+import           Data.Text            hiding (null)
 import           Data.Time.Clock
+import           Data.Time.Format
+import           Data.Time.LocalTime
 import           Prelude              hiding (log)
 
 import qualified JIRA                 as J
@@ -29,15 +32,15 @@ type CommandM = ExceptT Failure (ReaderT Options (StateT Log IO))
 runCommandM :: CommandM a -> Options -> Log -> IO (Either Failure a, Log)
 runCommandM act opts =
   runStateT (runReaderT (runExceptT act) opts)
-
 runWithOptions :: J.EnvM a -> CommandM a
 runWithOptions act = liftIO . J.runEnv act . makeEnv =<< ask
 
 log :: J.IssueKey -> J.TimeSpent -> CommandM (Maybe String)
 log issueKey timeSpent = do
-  void $ runWithOptions act
+  now <- liftIO getCurrentTime
+  void $ runWithOptions (act now)
   return $ Just $ logResult timeSpent
-  where act = J.log issueKey $ J.WorkLog timeSpent Nothing
+  where act t = J.log issueKey $ J.WorkLog timeSpent t
         logResult (J.TimeSpentCode txt) =
           "Logged " <> toS txt <> " on " <> toS issueKey
         logResult (J.TimeSpentSeconds sec) =
@@ -76,13 +79,24 @@ start :: J.IssueKey -> CommandM (Maybe String)
 start issueKey = do
   exists <- runWithOptions (J.issueExists issueKey)
   if exists then do
-    now <- liftIO getCurrentTime
+    now <- liftIO getZonedTime
     modify (<> [LogLine now (Started issueKey)])
     return $ Just $ "Started working on " <> toS issueKey
   else throwError (toS issueKey <> " does not exists")
 
 review :: CommandM (Maybe String)
 review = do
-  (worklog, _) <- toWorkLog <$> get
-  liftIO $ mapM_ print worklog
-  return Nothing
+  (workLog, _) <- toWorkLog <$> get
+  if not $ null workLog
+    then liftIO $ mapM_ displayLine workLog >> return Nothing
+    else return $ Just "No items in local work log"
+    where
+      displayLine (issueKey,  J.WorkLog{..}) = do
+        started' <- utcToLocalZonedTime started
+        let str = toS issueKey <> "\t" <> displayTime started' <> "\t"
+              <> J.displayTimeSpent timeSpent
+        liftIO $ putStrLn str
+
+displayTime :: ZonedTime -> String
+displayTime = formatTime defaultTimeLocale formatStr
+  where formatStr = iso8601DateFormat (Just "%H:%M:%S")

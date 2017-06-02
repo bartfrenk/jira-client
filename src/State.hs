@@ -1,18 +1,19 @@
 {-# LANGUAGE DeriveGeneric #-}
 module State where
 
-import           Control.Exception (throwIO)
-import           Data.ByteString   (readFile, writeFile)
-import           Data.Maybe        (fromMaybe)
-import           Data.Time.Clock
-import           Data.Yaml         as YAML
+import           Control.Exception   (throwIO)
+import           Data.ByteString     (readFile, writeFile)
+import           Data.Maybe          (fromMaybe)
+import           Data.Time.Clock     (diffUTCTime)
+import           Data.Time.LocalTime
+import           Data.Yaml           as YAML
 import           GHC.Generics
-import           Prelude           hiding (readFile, writeFile, log)
-import           System.Directory  (doesFileExist, getHomeDirectory)
-import           System.FilePath   ((</>))
+import           Prelude             hiding (log, readFile, writeFile)
+import           System.Directory    (doesFileExist, getHomeDirectory)
+import           System.FilePath     ((</>))
 
 import           Core
-import qualified JIRA              as J
+import qualified JIRA                as J
 
 type Log = [LogLine]
 
@@ -22,20 +23,19 @@ data LogLineType = Started J.IssueKey | Stopped
 instance FromJSON LogLineType
 instance ToJSON LogLineType
 
-data LogLine = LogLine UTCTime LogLineType
-  deriving (Eq, Show, Generic)
+data LogLine = LogLine ZonedTime LogLineType
+  deriving (Show, Generic)
 
-
-diffToSeconds :: UTCTime -> UTCTime -> Integer
+diffToSeconds :: ZonedTime -> ZonedTime -> Integer
 diffToSeconds t s =
-  let secs = realToFrac $ diffUTCTime t s :: Double
-  in truncate secs
+  let delta = diffUTCTime (zonedTimeToUTC t) (zonedTimeToUTC s)
+  in truncate (realToFrac delta :: Double)
 
 toWorkLog :: Log -> ([(J.IssueKey, J.WorkLog)], Log)
 toWorkLog (LogLine s (Started key) : end@(LogLine t _) : rest) =
   let (wl, log) = toWorkLog (end:rest)
       sec = diffToSeconds t s
-  in ((key, J.WorkLog (J.TimeSpentSeconds sec) (Just s)):wl, log)
+  in ((key, J.WorkLog (J.TimeSpentSeconds sec) (zonedTimeToUTC s)):wl, log)
 toWorkLog (_:rest) = toWorkLog rest
 toWorkLog [] = ([], [])
 

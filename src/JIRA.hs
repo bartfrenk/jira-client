@@ -15,6 +15,7 @@ module JIRA (runEnv,
              log,
              IssueKey,
              TimeSpent(..),
+             displayTimeSpent,
              EnvM,
              WorkLog(..),
              Env(..),
@@ -33,7 +34,6 @@ import qualified Data.ByteString.Char8         as C8
 import qualified Data.ByteString.Lazy.Internal as L
 import           Data.Conduit                  (Source, yield)
 import qualified Data.HashMap.Lazy             as M
-import           Data.Maybe                    (maybeToList)
 import           Data.Monoid
 import           Data.Scientific
 import           Data.String.Conv
@@ -72,6 +72,20 @@ data TimeSpent
 instance ToJSON TimeSpent where
   toJSON (TimeSpentCode txt)    = toJSON txt
   toJSON (TimeSpentSeconds sec) = toJSON sec
+
+displayTimeSpent :: TimeSpent -> String
+displayTimeSpent (TimeSpentCode txt) = toS txt
+displayTimeSpent (TimeSpentSeconds sec) =
+  let seconds = scanr (*) 1 [60, 60, 24]
+      periods = ["d", "h", "m", "s"]
+      perPeriod = breakdown sec seconds
+      nonZero = filter ((/= 0) . fst) $ zip perPeriod periods
+  in concat $ (\(s, t) -> show s <> t) <$> nonZero
+
+breakdown :: Integer -> [Integer] -> [Integer]
+breakdown n (x:xs) = (n `div` x):breakdown (n `mod` x) xs
+breakdown _ [] = []
+
 
 instance FromJSON TimeSpent where
   parseJSON (String txt) = return $ TimeSpentCode txt
@@ -160,7 +174,7 @@ post url payload = do
 
 data WorkLog = WorkLog
   { timeSpent :: TimeSpent
-  , started   :: Maybe UTCTime
+  , started   :: UTCTime
   } deriving (Show, Generic)
 
 
@@ -182,14 +196,11 @@ issueExists issueKey = do
 
 instance ToJSON WorkLog where
   toJSON WorkLog{..} =
-    Object $ M.fromList $ maybeToList
-    (("started",) . toJSON <$> started) ++
-    [
+    Object $ M.fromList
+    [("started", toJSON started),
       case timeSpent of
         TimeSpentCode txt    -> ("timeSpent", toJSON txt)
         TimeSpentSeconds sec -> ("timeSpentSeconds", toJSON sec)]
-
--- $(deriveJSON defaultOptions { omitNothingFields = True } ''WorkLog)
 
 log :: IssueKey -> WorkLog -> EnvM ByteString
 log issueKey workLog = do
