@@ -97,7 +97,7 @@ instance ToJSON TimeSpent where
 displayTimeSpent :: TimeSpent -> String
 displayTimeSpent (TimeSpentCode txt) = toS txt
 displayTimeSpent (TimeSpentSeconds sec) =
-  let seconds = scanr (*) 1 [60, 60, 24]
+  let seconds = scanr (*) 1 [24, 60, 60]
       periods = ["d", "h", "m", "s"]
       perPeriod = breakdown sec seconds
       nonZero = filter ((/= 0) . fst) $ zip perPeriod periods
