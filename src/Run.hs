@@ -86,6 +86,17 @@ start issueKey = do
     else return $ Just $ "Already working on " <> J.formatIssueKey issueKey
   else throwError (J.formatIssueKey issueKey <> " does not exists")
 
+stop :: CommandM (Maybe String)
+stop = do
+  active <- getActiveIssue
+  now <- liftIO getZonedTime
+  case active of
+    Just issueKey -> do
+      modify (<> [LogLine now Stopped])
+      return $ Just $ "Stopped working on " <> J.formatIssueKey issueKey
+    Nothing ->
+      return $ Just "Not working on any issue currently"
+
 review :: CommandM (Maybe String)
 review = do
   active <- getActiveIssue
