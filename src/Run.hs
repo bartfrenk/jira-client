@@ -95,7 +95,7 @@ stop = do
       modify (<> [LogLine now Stopped])
       return $ Just $ "Stopped working on " <> J.formatIssueKey issueKey
     Nothing ->
-      return $ Just "Not working on any issue currently"
+      return $ Just "No active issue"
 
 review :: CommandM (Maybe String)
 review = do
