@@ -12,8 +12,11 @@
 module JIRA (runEnv,
              issueSearch,
              issueExists,
+             formatIssue,
+             formatIssueKey,
              log,
              IssueKey,
+             mkIssueKey,
              TimeSpent(..),
              displayTimeSpent,
              EnvM,
@@ -37,7 +40,7 @@ import qualified Data.HashMap.Lazy             as M
 import           Data.Monoid
 import           Data.Scientific
 import           Data.String.Conv
-import           Data.Text                     (Text)
+import qualified Data.Text                     as T
 import           Data.Time.Clock
 import           GHC.Generics
 import           Network.HTTP.Client           (HttpException (..),
@@ -48,7 +51,7 @@ import qualified Network.Wreq                  as W
 import           Network.Wreq.Types            (Postable)
 import           Prelude                       hiding (log)
 
-newtype JQL = JQL Text deriving (Eq, Show)
+newtype JQL = JQL T.Text deriving (Eq, Show)
 
 
 instance FromJSON JQL where
@@ -60,12 +63,30 @@ instance StringConv String JQL where
 instance StringConv JQL ByteString where
   strConv leniency (JQL t) = strConv leniency t
 
-type IssueKey = Text
+newtype IssueKey = IssueKey T.Text
+
+instance Show IssueKey where
+  show (IssueKey txt) = toS $ T.toUpper txt
+
+instance Eq IssueKey where
+  (IssueKey t) == (IssueKey s) = T.toUpper t == T.toUpper s
+
+instance FromJSON IssueKey where
+  parseJSON = (IssueKey <$>) . parseJSON
+
+instance ToJSON IssueKey where
+  toJSON (IssueKey txt) = toJSON $ T.toUpper txt
+
+formatIssueKey :: (StringConv T.Text s) => IssueKey -> s
+formatIssueKey (IssueKey txt) = toS $ T.toUpper txt
+
+mkIssueKey :: T.Text -> IssueKey
+mkIssueKey = IssueKey
 
 -- TODO: smart constructor that only allows valid values:
 -- value for timeSpentSeconds must be larger than 60
 data TimeSpent
-  = TimeSpentCode Text
+  = TimeSpentCode T.Text
   | TimeSpentSeconds Integer
   deriving (Show)
 
@@ -98,10 +119,18 @@ type Path = ByteString
 
 data Issue = Issue
   { key     :: IssueKey
-  , id      :: Text
-  , summary :: Text
+  , id      :: T.Text
+  , summary :: T.Text
   , points  :: Maybe Double
   } deriving (Eq, Show, Generic)
+
+
+-- TODO: should make use of builder for performance
+formatIssue :: Issue -> T.Text
+formatIssue issue =
+     formatIssueKey (key issue) <> "\t"
+  <> maybe "-" (toS . show) (points issue) <> "\t"
+  <> summary issue
 
 instance FromJSON Issue where
   parseJSON = withObject "Issue" $ \v -> Issue
@@ -181,7 +210,7 @@ data WorkLog = WorkLog
 -- TODO: check response
 issueExists :: IssueKey -> EnvM Bool
 issueExists issueKey = do
-  url <- createURL ("/issue/" <> toS issueKey) []
+  url <- createURL ("/issue/" <> formatIssueKey issueKey) []
   response <- get (defaults & checkResponse .~ Just ignore) url
   case response ^. responseStatus . statusCode of
     200 -> return True
@@ -204,5 +233,5 @@ instance ToJSON WorkLog where
 
 log :: IssueKey -> WorkLog -> EnvM ByteString
 log issueKey workLog = do
-  path <- createURL ("/issue/" <> toS issueKey <> "/worklog") []
+  path <- createURL ("/issue/" <> formatIssueKey issueKey <> "/worklog") []
   post path (encode workLog)

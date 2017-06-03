@@ -11,10 +11,10 @@ import           Control.Monad.State
 import           Data.Conduit
 import qualified Data.Conduit.List    as CL
 import qualified Data.Map.Strict      as Map
-import           Data.Maybe           (fromMaybe, maybe)
+import           Data.Maybe           (fromMaybe, maybe, isNothing)
 import           Data.Semigroup       ((<>))
 import           Data.String.Conv     (toS)
-import           Data.Text            hiding (null)
+import qualified Data.Text            as T
 import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.Time.LocalTime
@@ -42,9 +42,9 @@ log issueKey timeSpent = do
   return $ Just $ logResult timeSpent
   where act t = J.log issueKey $ J.WorkLog timeSpent t
         logResult (J.TimeSpentCode txt) =
-          "Logged " <> toS txt <> " on " <> toS issueKey
+          "Logged " <> toS txt <> " on " <> J.formatIssueKey issueKey
         logResult (J.TimeSpentSeconds sec) =
-          "Logged " <> show sec <> " seconds on " <> toS issueKey
+          "Logged " <> show sec <> " seconds on " <> J.formatIssueKey issueKey
 
 
 search :: J.JQL -> CommandM (Maybe String)
@@ -55,37 +55,45 @@ search jql = do
 
 lookupQuery :: MonadReader Options m => J.JQL -> m J.JQL
 lookupQuery orig@(J.JQL t) =
-  case split (== ':') t of
+  case T.split (== ':') t of
     ["jql", key] -> fromMaybe orig . Map.lookup key <$> reader queries
     _            -> return orig
 
 printer :: MonadIO m => Sink J.Issue m ()
-printer = CL.mapM_ (liftIO . putStrLn . toS . formatIssue)
+printer = CL.mapM_ (liftIO . putStrLn . toS . J.formatIssue)
 
--- TODO: should go in separate formatter module
--- TODO: should make use of builder for performance
-formatIssue :: J.Issue -> Text
-formatIssue issue =
-     J.key issue <> "\t"
-  <> maybe "-" (toS . show) (J.points issue) <> "\t"
-  <> J.summary issue
+
+getActiveIssue :: (MonadState Log m) => m (Maybe J.IssueKey)
+getActiveIssue = toIssueKey . last <$> get
+  where toIssueKey (LogLine _ (Started issueKey)) = Just issueKey
+        toIssueKey _ = Nothing
 
 -- TODO: check whether we are already working on requested issue Would be better
 -- to have good equality on IssueKey, for example by representing it as a
 -- product of normalized project name, and a number.
 -- TODO: allow comments, or
 -- maybe categories of work: i.e. code-review, development
+-- TODO: nicer validation
 start :: J.IssueKey -> CommandM (Maybe String)
 start issueKey = do
   exists <- runWithOptions (J.issueExists issueKey)
   if exists then do
-    now <- liftIO getZonedTime
-    modify (<> [LogLine now (Started issueKey)])
-    return $ Just $ "Started working on " <> toS issueKey
-  else throwError (toS issueKey <> " does not exists")
+    active <- getActiveIssue
+    if isNothing active || active /= Just issueKey then do
+      now <- liftIO getZonedTime
+      modify (<> [LogLine now (Started issueKey)])
+      return $ Just $ "Started working on " <> J.formatIssueKey issueKey
+    else return $ Just $ "Already working on " <> J.formatIssueKey issueKey
+  else throwError (J.formatIssueKey issueKey <> " does not exists")
 
 review :: CommandM (Maybe String)
 review = do
+  active <- getActiveIssue
+  case active of
+    Nothing -> liftIO $ putStrLn "No active issue\n"
+    Just issueKey -> liftIO $ putStrLn $ "Active issue: "
+                                      <> J.formatIssueKey issueKey
+                                      <> "\n"
   (workLog, _) <- toWorkLog <$> get
   if not $ null workLog
     then liftIO $ mapM_ displayLine workLog >> return Nothing
@@ -93,7 +101,8 @@ review = do
     where
       displayLine (issueKey,  J.WorkLog{..}) = do
         started' <- utcToLocalZonedTime started
-        let str = toS issueKey <> "\t" <> displayTime started' <> "\t"
+        let str = J.formatIssueKey issueKey <> "\t"
+              <> displayTime started' <> "\t"
               <> J.displayTimeSpent timeSpent
         liftIO $ putStrLn str
 

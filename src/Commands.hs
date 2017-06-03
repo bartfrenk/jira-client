@@ -18,8 +18,9 @@ data Command
 
 -- | If a number, read number and prepend prefix, otherwise read full issue key.
 readIssueKey :: Text -> ReadM J.IssueKey
-readIssueKey prefix = (prefix <>) <$> index <|> toS <$> str
+readIssueKey prefix = J.mkIssueKey <$> txtParser
   where index = toS . show <$> (auto :: ReadM Int)
+        txtParser = (prefix <>) <$> index <|> toS <$> str
 
 parseSearch :: Parser Command
 parseSearch = Search <$> argument jql (metavar "JQL-QUERY")
