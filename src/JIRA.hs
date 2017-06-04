@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -5,7 +6,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
@@ -13,12 +13,9 @@ module JIRA (runEnv,
              issueSearch,
              issueExists,
              formatIssue,
-             formatIssueKey,
              log,
              IssueKey,
-             mkIssueKey,
              TimeSpent(..),
-             displayTimeSpent,
              EnvM,
              WorkLog(..),
              Env(..),
@@ -31,28 +28,26 @@ import           Control.Monad.IO.Class        (liftIO)
 import           Control.Monad.Reader
 import           Data.Aeson
 import qualified Data.Aeson.Lens               as J
-import           Data.Aeson.Types              (typeMismatch)
 import           Data.ByteString               (ByteString)
 import qualified Data.ByteString.Char8         as C8
 import qualified Data.ByteString.Lazy.Internal as L
 import           Data.Conduit                  (Source, yield)
-import qualified Data.HashMap.Lazy             as M
+import qualified Data.HashMap.Lazy as M
 import           Data.Monoid
-import           Data.Scientific
 import           Data.String.Conv
 import qualified Data.Text                     as T
-import           Data.Time.Clock
 import           GHC.Generics
 import           Network.HTTP.Client           (HttpException (..),
                                                 HttpExceptionContent (..))
 import           Network.HTTP.Types            (Query, renderQuery, urlDecode)
-import           Network.Wreq                  hiding (get, post)
 import qualified Network.Wreq                  as W
+import           Network.Wreq                  hiding (get, post)
 import           Network.Wreq.Types            (Postable)
 import           Prelude                       hiding (log)
 
-newtype JQL = JQL T.Text deriving (Eq, Show)
+import           Concepts
 
+newtype JQL = JQL T.Text deriving (Eq, Show)
 
 instance FromJSON JQL where
   parseJSON = (JQL <$>) . parseJSON
@@ -62,59 +57,6 @@ instance StringConv String JQL where
 
 instance StringConv JQL ByteString where
   strConv leniency (JQL t) = strConv leniency t
-
-newtype IssueKey = IssueKey T.Text
-
-instance Show IssueKey where
-  show (IssueKey txt) = toS $ T.toUpper txt
-
-instance Eq IssueKey where
-  (IssueKey t) == (IssueKey s) = T.toUpper t == T.toUpper s
-
-instance FromJSON IssueKey where
-  parseJSON = (IssueKey <$>) . parseJSON
-
-instance ToJSON IssueKey where
-  toJSON (IssueKey txt) = toJSON $ T.toUpper txt
-
-formatIssueKey :: (StringConv T.Text s) => IssueKey -> s
-formatIssueKey (IssueKey txt) = toS $ T.toUpper txt
-
-mkIssueKey :: T.Text -> IssueKey
-mkIssueKey = IssueKey
-
--- TODO: smart constructor that only allows valid values:
--- value for timeSpentSeconds must be larger than 60
-data TimeSpent
-  = TimeSpentCode T.Text
-  | TimeSpentSeconds Integer
-  deriving (Show)
-
-instance ToJSON TimeSpent where
-  toJSON (TimeSpentCode txt)    = toJSON txt
-  toJSON (TimeSpentSeconds sec) = toJSON sec
-
-displayTimeSpent :: TimeSpent -> String
-displayTimeSpent (TimeSpentCode txt) = toS txt
-displayTimeSpent (TimeSpentSeconds sec) =
-  let seconds = scanr (*) 1 [24, 60, 60]
-      periods = ["d", "h", "m", "s"]
-      perPeriod = breakdown sec seconds
-      nonZero = filter ((/= 0) . fst) $ zip perPeriod periods
-  in concat $ (\(s, t) -> show s <> t) <$> nonZero
-
-breakdown :: Integer -> [Integer] -> [Integer]
-breakdown n (x:xs) = (n `div` x):breakdown (n `mod` x) xs
-breakdown _ [] = []
-
-
-instance FromJSON TimeSpent where
-  parseJSON (String txt) = return $ TimeSpentCode txt
-  parseJSON v@(Number sci) = if isInteger sci
-    then return $ TimeSpentSeconds $ truncate sci
-    else typeMismatch "Time in seconds should be an integer" v
-  parseJSON v            = typeMismatch "Invalid time specification" v
-
 type Path = ByteString
 
 data Issue = Issue
@@ -128,7 +70,7 @@ data Issue = Issue
 -- TODO: should make use of builder for performance
 formatIssue :: Issue -> T.Text
 formatIssue issue =
-     formatIssueKey (key issue) <> "\t"
+     toText (key issue) <> "\t"
   <> maybe "-" (toS . show) (points issue) <> "\t"
   <> summary issue
 
@@ -201,16 +143,10 @@ post url payload = do
   response <- liftIO $ postWith opts (toS url) payload
   return $ response ^. responseBody . strict
 
-data WorkLog = WorkLog
-  { timeSpent :: TimeSpent
-  , started   :: UTCTime
-  } deriving (Show, Generic)
-
-
 -- TODO: check response
 issueExists :: IssueKey -> EnvM Bool
 issueExists issueKey = do
-  url <- createURL ("/issue/" <> formatIssueKey issueKey) []
+  url <- createURL ("/issue/" <> toS (toText issueKey)) []
   response <- get (defaults & checkResponse .~ Just ignore) url
   case response ^. responseStatus . statusCode of
     200 -> return True
@@ -223,15 +159,13 @@ issueExists issueKey = do
             404 -> return ()
             _   -> throwIO $ mkException req resp
 
-instance ToJSON WorkLog where
-  toJSON WorkLog{..} =
-    Object $ M.fromList
-    [("started", toJSON started),
-      case timeSpent of
-        TimeSpentCode txt    -> ("timeSpent", toJSON txt)
-        TimeSpentSeconds sec -> ("timeSpentSeconds", toJSON sec)]
 
-log :: IssueKey -> WorkLog -> EnvM ByteString
-log issueKey workLog = do
-  path <- createURL ("/issue/" <> formatIssueKey issueKey <> "/worklog") []
-  post path (encode workLog)
+log :: WorkLog -> EnvM ByteString
+log WorkLog{..} = do
+  path <- createURL ("/issue/" <> toS (toText issueKey) <> "/worklog") []
+  liftIO $ print payload
+  post path payload
+  where
+    payload = encode $ Object $
+      M.fromList [("started", toJSON started),
+                  ("timeSpentSeconds", toJSON $ toSeconds timeSpent)]

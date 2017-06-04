@@ -15,32 +15,38 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
+  other-modules:       Format
+                       Utils
   exposed-modules:     Commands
                        Core
                        JIRA
                        Options
                        Run
                        State
-  build-depends:       base >= 4.7 && < 5
-                     , aeson
+                       Concepts
+  build-depends:       aeson
                      , aeson-pretty
+                     , ansi-wl-pprint
+                     , base >= 4.7 && < 5
                      , boxes
                      , bytestring
                      , conduit
                      , containers
                      , directory
                      , filepath
-                     , lens
                      , http-client
-                     , lens-aeson
                      , http-types
+                     , lens
+                     , lens-aeson
                      , mtl
                      , optparse-applicative
+                     , parsec
+                     , scientific
                      , string-conv
                      , stringsearch
-                     , scientific
                      , text
                      , time
+                     , transformers
                      , unordered-containers
                      , wreq
                      , yaml
@@ -51,10 +57,10 @@ executable jira-cli
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , ansi-wl-pprint
                      , jira-client
                      , optparse-applicative
                      , aeson
+                     , ansi-wl-pprint
                      , boxes
                      , bytestring
                      , conduit

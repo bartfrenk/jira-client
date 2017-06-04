@@ -2,12 +2,14 @@
 
 module Commands where
 
-import           Data.Semigroup      ((<>))
-import           Data.String.Conv    (toS)
-import           Data.Text           hiding (index, words)
+import           Data.Bifunctor             (first)
+import           Data.Semigroup             ((<>))
+import           Data.String.Conv           (toS)
+import           Data.Text                  hiding (index, words)
 import           Options.Applicative
 
-import qualified JIRA                as J
+import           Concepts
+import qualified JIRA                       as J
 import           Options
 
 data Command
@@ -19,7 +21,7 @@ data Command
 
 -- | If a number, read number and prepend prefix, otherwise read full issue key.
 readIssueKey :: Text -> ReadM J.IssueKey
-readIssueKey prefix = J.mkIssueKey <$> txtParser
+readIssueKey prefix = fromText <$> txtParser
   where index = toS . show <$> (auto :: ReadM Int)
         txtParser = (prefix <>) <$> index <|> toS <$> str
 
@@ -40,8 +42,9 @@ parseStop = pure Stop
 parseLog :: Text -> Parser Command
 parseLog prefix = Log
   <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
-  <*> argument timeSpent (metavar "TIME-SPENT")
-  where timeSpent = J.TimeSpentCode . toS <$> str
+  <*> argument timeSpentReader (metavar "TIME-SPENT")
+  where timeSpentReader = eitherReader $ \s ->
+          first show $ fromDurationString (toS s)
 
 withInfo :: Parser a -> String -> ParserInfo a
 withInfo p desc = p `info` progDesc desc

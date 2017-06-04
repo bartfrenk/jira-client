@@ -14,6 +14,7 @@ import           System.FilePath     ((</>))
 
 import           Core
 import qualified JIRA                as J
+import Concepts
 
 type Log = [LogLine]
 
@@ -31,11 +32,11 @@ diffToSeconds t s =
   let delta = diffUTCTime (zonedTimeToUTC t) (zonedTimeToUTC s)
   in truncate (realToFrac delta :: Double)
 
-toWorkLog :: Log -> ([(J.IssueKey, J.WorkLog)], Log)
+toWorkLog :: Log -> ([J.WorkLog], Log)
 toWorkLog (LogLine s (Started key) : end@(LogLine t _) : rest) =
   let (wl, log) = toWorkLog (end:rest)
       sec = diffToSeconds t s
-  in ((key, J.WorkLog (J.TimeSpentSeconds sec) (zonedTimeToUTC s)):wl, log)
+  in ((WorkLog key (fromSeconds sec) (zonedTimeToUTC s)):wl, log)
 toWorkLog (_:rest) = toWorkLog rest
 toWorkLog [] = ([], [])
 

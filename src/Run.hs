@@ -11,7 +11,7 @@ import           Control.Monad.State
 import           Data.Conduit
 import qualified Data.Conduit.List    as CL
 import qualified Data.Map.Strict      as Map
-import           Data.Maybe           (fromMaybe, maybe, isNothing)
+import           Data.Maybe           (fromMaybe, isNothing)
 import           Data.Semigroup       ((<>))
 import           Data.String.Conv     (toS)
 import qualified Data.Text            as T
@@ -20,6 +20,7 @@ import           Data.Time.Format
 import           Data.Time.LocalTime
 import           Prelude              hiding (log)
 
+import           Concepts
 import qualified JIRA                 as J
 import           Options
 import           State
@@ -39,13 +40,8 @@ log :: J.IssueKey -> J.TimeSpent -> CommandM (Maybe String)
 log issueKey timeSpent = do
   now <- liftIO getCurrentTime
   void $ runWithOptions (act now)
-  return $ Just $ logResult timeSpent
-  where act t = J.log issueKey $ J.WorkLog timeSpent t
-        logResult (J.TimeSpentCode txt) =
-          "Logged " <> toS txt <> " on " <> J.formatIssueKey issueKey
-        logResult (J.TimeSpentSeconds sec) =
-          "Logged " <> show sec <> " seconds on " <> J.formatIssueKey issueKey
-
+  return $ Just $ "Logged " <> toS (toDurationString timeSpent)
+  where act t = J.log $ J.WorkLog issueKey timeSpent t
 
 search :: J.JQL -> CommandM (Maybe String)
 search jql = do
@@ -66,7 +62,7 @@ printer = CL.mapM_ (liftIO . putStrLn . toS . J.formatIssue)
 getActiveIssue :: (MonadState Log m) => m (Maybe J.IssueKey)
 getActiveIssue = toIssueKey . last <$> get
   where toIssueKey (LogLine _ (Started issueKey)) = Just issueKey
-        toIssueKey _ = Nothing
+        toIssueKey _                              = Nothing
 
 -- TODO: check whether we are already working on requested issue Would be better
 -- to have good equality on IssueKey, for example by representing it as a
@@ -82,9 +78,9 @@ start issueKey = do
     if isNothing active || active /= Just issueKey then do
       now <- liftIO getZonedTime
       modify (<> [LogLine now (Started issueKey)])
-      return $ Just $ "Started working on " <> J.formatIssueKey issueKey
-    else return $ Just $ "Already working on " <> J.formatIssueKey issueKey
-  else throwError (J.formatIssueKey issueKey <> " does not exists")
+      return $ Just $ "Started working on " <> toS (toText issueKey)
+    else return $ Just $ "Already working on " <> toS (toText issueKey)
+  else throwError (toS (toText issueKey) <> " does not exists")
 
 stop :: CommandM (Maybe String)
 stop = do
@@ -93,28 +89,33 @@ stop = do
   case active of
     Just issueKey -> do
       modify (<> [LogLine now Stopped])
-      return $ Just $ "Stopped working on " <> J.formatIssueKey issueKey
+      return $ Just $ "Stopped working on " <> toS (toText issueKey)
     Nothing ->
       return $ Just "No active issue"
 
+-- TODO: Use pretty printing library for better overview
+--  - Less detailed start time
+--  - Show gaps
+--  - Show summary per day
+--  - refactor: split out in 'putActiveIssue' and 'putWorkLog'
 review :: CommandM (Maybe String)
 review = do
   active <- getActiveIssue
   case active of
     Nothing -> liftIO $ putStrLn "No active issue\n"
     Just issueKey -> liftIO $ putStrLn $ "Active issue: "
-                                      <> J.formatIssueKey issueKey
+                                      <> toS (toText issueKey)
                                       <> "\n"
   (workLog, _) <- toWorkLog <$> get
   if not $ null workLog
     then liftIO $ mapM_ displayLine workLog >> return Nothing
     else return $ Just "No items in local work log"
     where
-      displayLine (issueKey,  J.WorkLog{..}) = do
+      displayLine J.WorkLog{..} = do
         started' <- utcToLocalZonedTime started
-        let str = J.formatIssueKey issueKey <> "\t"
+        let str = toS (toText issueKey) <> "\t"
               <> displayTime started' <> "\t"
-              <> J.displayTimeSpent timeSpent
+              <> toS (toDurationString timeSpent)
         liftIO $ putStrLn str
 
 displayTime :: ZonedTime -> String
