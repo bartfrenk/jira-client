@@ -36,7 +36,7 @@ toWorkLog :: Log -> ([J.WorkLog], Log)
 toWorkLog (LogLine s (Started key) : end@(LogLine t _) : rest) =
   let (wl, log) = toWorkLog (end:rest)
       sec = diffToSeconds t s
-  in ((WorkLog key (fromSeconds sec) (zonedTimeToUTC s)):wl, log)
+  in (WorkLog key (fromSeconds sec) s : wl, log)
 toWorkLog (_:rest) = toWorkLog rest
 toWorkLog [] = ([], [])
 

@@ -1,4 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts      #-}
@@ -6,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE TupleSections         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
@@ -32,7 +32,7 @@ import           Data.ByteString               (ByteString)
 import qualified Data.ByteString.Char8         as C8
 import qualified Data.ByteString.Lazy.Internal as L
 import           Data.Conduit                  (Source, yield)
-import qualified Data.HashMap.Lazy as M
+import qualified Data.HashMap.Lazy             as M
 import           Data.Monoid
 import           Data.String.Conv
 import qualified Data.Text                     as T
@@ -40,8 +40,8 @@ import           GHC.Generics
 import           Network.HTTP.Client           (HttpException (..),
                                                 HttpExceptionContent (..))
 import           Network.HTTP.Types            (Query, renderQuery, urlDecode)
-import qualified Network.Wreq                  as W
 import           Network.Wreq                  hiding (get, post)
+import qualified Network.Wreq                  as W
 import           Network.Wreq.Types            (Postable)
 import           Prelude                       hiding (log)
 

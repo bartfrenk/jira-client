@@ -2,45 +2,35 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE StrictData            #-}
 module Concepts where
 
 import           Data.Aeson
-import           Data.Semigroup   (getSum, (<>))
-import           Data.String.Conv (toS)
-import qualified Data.Text        as T
-import           Data.Time.Clock
-import           GHC.Generics     (Generic)
-import           Prelude          hiding (Read)
+import           Data.Semigroup      ((<>))
+import           Data.String.Conv    (toS)
+import qualified Data.Text           as T
+import           Data.Time.Format
+import           Data.Time.LocalTime
+import           GHC.Generics        (Generic)
+import           Prelude             hiding (Read)
 import           Text.Parsec
-import           Text.Read
 
-import qualified Format           as F
-import           Utils            (breakdown)
+import           Utils               (breakdown)
 
 data WorkLog = WorkLog
   { issueKey  :: IssueKey
   , timeSpent :: TimeSpent
-  , started   :: UTCTime
+  , started   :: ZonedTime
   } deriving (Show, Generic)
 
 newtype TimeSpent = TimeSpent { toSeconds :: Integer }
 
 instance Show TimeSpent where
   show (TimeSpent s) = show s
-
-instance Monoid TimeSpent where
-  mempty = TimeSpent 0
-  (TimeSpent s) `mappend` (TimeSpent t) = TimeSpent (s + t)
-
-instance Read TimeSpent where
-  readPrec = TimeSpent <$> readPrec
-
-instance F.Format TimeSpent where
-  format = F.text . toS . toDurationString
-
 fromSeconds :: Integer -> TimeSpent
 fromSeconds = TimeSpent
 
+-- |Parser to convert strings of the form '1h3d2m1s' to TimeSpent objects.
 durationStringParser :: Parsec T.Text u TimeSpent
 durationStringParser = TimeSpent . sum <$> sepBy1 seconds whitespace
   where number = read <$> many1 digit
@@ -51,13 +41,14 @@ durationStringParser = TimeSpent . sum <$> sepBy1 seconds whitespace
         countSeconds n 'h' = n * 60 * 60
         countSeconds n 'm' = n * 60
         countSeconds n 's' = n
-        countSeconds _ c = error (show c)
+        countSeconds _ _   = error ""
 
 -- |Reads from a string of the form '1h3d2m1s' ignoring spaces, and summing
 -- duplicate entries.
 fromDurationString :: T.Text -> Either ParseError TimeSpent
 fromDurationString = parse durationStringParser ""
 
+-- |Maps to a string of the form '1h3d2m1s'.
 toDurationString :: TimeSpent -> T.Text
 toDurationString = T.concat . toDurationList
 

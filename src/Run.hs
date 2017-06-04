@@ -21,6 +21,7 @@ import           Data.Time.LocalTime
 import           Prelude              hiding (log)
 
 import           Concepts
+import qualified Format               as F
 import qualified JIRA                 as J
 import           Options
 import           State
@@ -38,7 +39,7 @@ runWithOptions act = liftIO . J.runEnv act . makeEnv =<< ask
 
 log :: J.IssueKey -> J.TimeSpent -> CommandM (Maybe String)
 log issueKey timeSpent = do
-  now <- liftIO getCurrentTime
+  now <- liftIO getZonedTime
   void $ runWithOptions (act now)
   return $ Just $ "Logged " <> toS (toDurationString timeSpent)
   where act t = J.log $ J.WorkLog issueKey timeSpent t
@@ -64,9 +65,6 @@ getActiveIssue = toIssueKey . last <$> get
   where toIssueKey (LogLine _ (Started issueKey)) = Just issueKey
         toIssueKey _                              = Nothing
 
--- TODO: check whether we are already working on requested issue Would be better
--- to have good equality on IssueKey, for example by representing it as a
--- product of normalized project name, and a number.
 -- TODO: allow comments, or
 -- maybe categories of work: i.e. code-review, development
 -- TODO: nicer validation
@@ -101,23 +99,21 @@ stop = do
 review :: CommandM (Maybe String)
 review = do
   active <- getActiveIssue
-  case active of
-    Nothing -> liftIO $ putStrLn "No active issue\n"
-    Just issueKey -> liftIO $ putStrLn $ "Active issue: "
-                                      <> toS (toText issueKey)
-                                      <> "\n"
   (workLog, _) <- toWorkLog <$> get
-  if not $ null workLog
-    then liftIO $ mapM_ displayLine workLog >> return Nothing
-    else return $ Just "No items in local work log"
-    where
-      displayLine J.WorkLog{..} = do
-        started' <- utcToLocalZonedTime started
-        let str = toS (toText issueKey) <> "\t"
-              <> displayTime started' <> "\t"
-              <> toS (toDurationString timeSpent)
-        liftIO $ putStrLn str
-
-displayTime :: ZonedTime -> String
-displayTime = formatTime defaultTimeLocale formatStr
-  where formatStr = iso8601DateFormat (Just "%H:%M:%S")
+  F.putDoc $
+    activeDoc active F.</$>
+    F.hardline F.<>
+    workLogDoc (removeInvalid workLog) F.</$>
+    F.hardline
+  return Nothing
+  where workLogDoc [] = F.text "Work log is empty"
+        workLogDoc workLog =
+          F.text "Work log to commit" F.</$>
+          F.indent 4 (F.format workLog)
+        activeDoc Nothing = F.text "No active issue"
+        activeDoc (Just issueKey) =
+          F.text "Active issue" F.</$>
+          F.hardline F.<>
+          F.indent 4 (F.format issueKey)
+        removeInvalid =
+          filter ((>= 60) . toSeconds . timeSpent)
