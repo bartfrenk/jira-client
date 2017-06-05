@@ -9,7 +9,6 @@ import           Data.Aeson
 import           Data.Semigroup      ((<>))
 import           Data.String.Conv    (toS)
 import qualified Data.Text           as T
-import           Data.Time.Format
 import           Data.Time.LocalTime
 import           GHC.Generics        (Generic)
 import           Prelude             hiding (Read)
@@ -24,6 +23,10 @@ data WorkLog = WorkLog
   } deriving (Show, Generic)
 
 newtype TimeSpent = TimeSpent { toSeconds :: Integer }
+
+instance Monoid TimeSpent where
+  mempty = TimeSpent 0
+  (TimeSpent s) `mappend` (TimeSpent t) = TimeSpent (s + t)
 
 instance Show TimeSpent where
   show (TimeSpent s) = show s

@@ -5,6 +5,7 @@
 
 module Run where
 
+import           Control.Monad        ((<=<))
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -12,6 +13,7 @@ import           Data.Conduit
 import qualified Data.Conduit.List    as CL
 import qualified Data.Map.Strict      as Map
 import           Data.Maybe           (fromMaybe, isNothing)
+import           Data.Monoid          (mconcat)
 import           Data.Semigroup       ((<>))
 import           Data.String.Conv     (toS)
 import qualified Data.Text            as T
@@ -59,11 +61,13 @@ lookupQuery orig@(J.JQL t) =
 printer :: MonadIO m => Sink J.Issue m ()
 printer = CL.mapM_ (liftIO . putStrLn . toS . J.formatIssue)
 
-
-getActiveIssue :: (MonadState Log m) => m (Maybe J.IssueKey)
-getActiveIssue = toIssueKey . last <$> get
-  where toIssueKey (LogLine _ (Started issueKey)) = Just issueKey
+getActiveIssue :: (MonadState Log m) => m (Maybe (ZonedTime, J.IssueKey))
+getActiveIssue = (toIssueKey <=< maybeLast) <$> get
+  where toIssueKey (LogLine t (Started issueKey)) = Just (t, issueKey)
         toIssueKey _                              = Nothing
+        maybeLast :: Log -> Maybe LogLine
+        maybeLast [] = Nothing
+        maybeLast xs = Just $ last xs
 
 -- TODO: allow comments, or
 -- maybe categories of work: i.e. code-review, development
@@ -73,7 +77,7 @@ start issueKey = do
   exists <- runWithOptions (J.issueExists issueKey)
   if exists then do
     active <- getActiveIssue
-    if isNothing active || active /= Just issueKey then do
+    if isNothing active || (snd <$> active) /= Just issueKey then do
       now <- liftIO getZonedTime
       modify (<> [LogLine now (Started issueKey)])
       return $ Just $ "Started working on " <> toS (toText issueKey)
@@ -85,14 +89,13 @@ stop = do
   active <- getActiveIssue
   now <- liftIO getZonedTime
   case active of
-    Just issueKey -> do
+    Just (_, issueKey) -> do
       modify (<> [LogLine now Stopped])
       return $ Just $ "Stopped working on " <> toS (toText issueKey)
     Nothing ->
       return $ Just "No active issue"
 
 -- TODO: Use pretty printing library for better overview
---  - Less detailed start time
 --  - Show gaps
 --  - Show summary per day
 --  - refactor: split out in 'putActiveIssue' and 'putWorkLog'
@@ -108,12 +111,14 @@ review = do
   return Nothing
   where workLogDoc [] = F.text "Work log is empty"
         workLogDoc workLog =
-          F.text "Work log to commit" F.</$>
+          F.text "Work log to commit (" F.<>
+          F.format (totalTime workLog) F.<> ")" F.</$>
           F.indent 4 (F.format workLog)
         activeDoc Nothing = F.text "No active issue"
-        activeDoc (Just issueKey) =
-          F.text "Active issue" F.</$>
+        activeDoc (Just (t, issueKey)) =
+          F.text "Active issue since" F.<+> F.format t F.</$>
           F.hardline F.<>
           F.indent 4 (F.format issueKey)
         removeInvalid =
           filter ((>= 60) . toSeconds . timeSpent)
+        totalTime workLog = mconcat $ timeSpent <$> workLog
