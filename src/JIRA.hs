@@ -36,6 +36,8 @@ import qualified Data.HashMap.Lazy             as M
 import           Data.Monoid
 import           Data.String.Conv
 import qualified Data.Text                     as T
+import           Data.Time.Format
+import           Data.Time.LocalTime           (zonedTimeToUTC)
 import           GHC.Generics
 import           Network.HTTP.Client           (HttpException (..),
                                                 HttpExceptionContent (..))
@@ -163,9 +165,9 @@ issueExists issueKey = do
 log :: WorkLog -> EnvM ByteString
 log WorkLog{..} = do
   path <- createURL ("/issue/" <> toS (toText issueKey) <> "/worklog") []
-  liftIO $ print payload
   post path payload
   where
     payload = encode $ Object $
-      M.fromList [("started", toJSON started),
+      M.fromList [("started", toJSON $ formatTime defaultTimeLocale formatStr started),
                   ("timeSpentSeconds", toJSON $ toSeconds timeSpent)]
+    formatStr = iso8601DateFormat (Just "%H:%M:%S.000%z")

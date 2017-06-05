@@ -107,7 +107,7 @@ review = do
   F.putDoc $
     activeDoc active F.</$>
     F.hardline F.<>
-    workLogDoc (removeInvalid workLog) F.</$>
+    workLogDoc (discardInvalid workLog) F.</$>
     F.hardline
   return Nothing
   where workLogDoc [] = F.text "Work log is empty"
@@ -120,14 +120,15 @@ review = do
           F.text "Active issue since" F.<+> F.format t F.</$>
           F.hardline F.<>
           F.indent 4 (F.format issueKey)
-        removeInvalid =
-          filter ((>= 60) . toSeconds . timeSpent)
         totalTime workLog = mconcat $ timeSpent <$> workLog
+
+discardInvalid :: [WorkLog] -> [WorkLog]
+discardInvalid = filter ((>= 60) . toSeconds . timeSpent)
 
 -- TODO: this screws up when J.log fails
 book :: CommandM (Maybe String)
 book = do
   (workLog, remainder) <- toWorkLog <$> get
   put remainder
-  runWithOptions $ mapM_ J.log workLog
+  runWithOptions $ mapM_ J.log (discardInvalid workLog)
   return Nothing
