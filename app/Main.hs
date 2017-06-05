@@ -26,6 +26,7 @@ action (Log issueKey timeSpent) = log issueKey timeSpent
 action (Start issueKey)         = start issueKey
 action Review                   = review
 action Stop                     = stop
+action Book                     = book
 
 run :: Command -> Options -> IO (Either Failure (Maybe String))
 run cmd opts = do

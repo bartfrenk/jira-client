@@ -36,6 +36,7 @@ type CommandM = ExceptT Failure (ReaderT Options (StateT Log IO))
 runCommandM :: CommandM a -> Options -> Log -> IO (Either Failure a, Log)
 runCommandM act opts =
   runStateT (runReaderT (runExceptT act) opts)
+
 runWithOptions :: J.EnvM a -> CommandM a
 runWithOptions act = liftIO . J.runEnv act . makeEnv =<< ask
 
@@ -122,3 +123,11 @@ review = do
         removeInvalid =
           filter ((>= 60) . toSeconds . timeSpent)
         totalTime workLog = mconcat $ timeSpent <$> workLog
+
+-- TODO: this screws up when J.log fails
+book :: CommandM (Maybe String)
+book = do
+  (workLog, remainder) <- toWorkLog <$> get
+  put remainder
+  runWithOptions $ mapM_ J.log workLog
+  return Nothing

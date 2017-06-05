@@ -18,6 +18,7 @@ data Command
   | Start J.IssueKey
   | Stop
   | Review
+  | Book
 
 -- | If a number, read number and prepend prefix, otherwise read full issue key.
 readIssueKey :: Text -> ReadM J.IssueKey
@@ -39,6 +40,9 @@ parseReview = pure Review
 parseStop :: Parser Command
 parseStop = pure Stop
 
+parseBook :: Parser Command
+parseBook = pure Book
+
 parseLog :: Text -> Parser Command
 parseLog prefix = Log
   <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
@@ -55,7 +59,8 @@ parseCommand opts = hsubparser $
   command "log"    (parseLog prefix `withInfo` "Create a new work log entry") <>
   command "start"  (parseStart prefix `withInfo` "Start work on an issue") <>
   command "stop"   (parseStop `withInfo` "Stop work on active issue") <>
-  command "review" (parseReview `withInfo` "Review logged work")
+  command "review" (parseReview `withInfo` "Review logged work") <>
+  command "book"   (parseBook `withInfo` "Book local worklog on JIRA")
   where prefix = defaultProject opts <> "-"
 
 runParser :: Options -> [String] -> IO Command
