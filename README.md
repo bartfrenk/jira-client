@@ -15,7 +15,7 @@ To install the `jira-cli` executable in the local directory tree (by default in
 
     stack install
 
-Then fill in `res/_config.yaml` and copy to `~/.config.yaml`.
+Then fill in `res/_config.yaml` and copy to `~/.jira-cli/config.yaml`.
 
 For bash completion, run:
 
