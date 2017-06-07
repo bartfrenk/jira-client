@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE RecordWildCards       #-}
 
 module Run where
 
@@ -18,12 +17,8 @@ import           Data.Monoid              (mconcat)
 import           Data.Semigroup           ((<>))
 import           Data.String.Conv         (toS)
 import qualified Data.Text                as T
-import           Data.Time.Clock
-import           Data.Time.Format
 import           Data.Time.LocalTime
-import           Network.HTTP.Client      (HttpException)
 import           Prelude                  hiding (log)
-import           Prelude                  hiding (try)
 
 import           Concepts
 import qualified Format                   as F
@@ -44,11 +39,11 @@ runWithOptions :: J.EnvM a -> CommandM a
 runWithOptions act = liftIO . J.runEnv act . makeEnv =<< ask
 
 log :: IssueKey -> TimeSpent -> CommandM (Maybe String)
-log issueKey timeSpent = do
+log key spent = do
   now <- liftIO getZonedTime
   void $ runWithOptions (act now)
-  return $ Just $ "Logged " <> toS (toDurationString timeSpent)
-  where act t = J.log $ WorkLog issueKey timeSpent t
+  return $ Just $ "Logged " <> toS (toDurationString spent)
+  where act t = J.log $ WorkLog key spent t
 
 search :: J.JQL -> CommandM (Maybe String)
 search jql = do
@@ -67,7 +62,7 @@ printer = CL.mapM_ (liftIO . putStrLn . toS . J.formatIssue)
 
 getActiveIssue :: (MonadState Log m) => m (Maybe (ZonedTime, IssueKey))
 getActiveIssue = (toIssueKey <=< maybeLast) <$> get
-  where toIssueKey (LogLine t (Started issueKey)) = Just (t, issueKey)
+  where toIssueKey (LogLine t (Started key)) = Just (t, key)
         toIssueKey _                              = Nothing
         maybeLast :: Log -> Maybe LogLine
         maybeLast [] = Nothing
@@ -77,25 +72,25 @@ getActiveIssue = (toIssueKey <=< maybeLast) <$> get
 -- maybe categories of work: i.e. code-review, development
 -- TODO: nicer validation
 start :: IssueKey -> CommandM (Maybe String)
-start issueKey = do
-  exists <- runWithOptions (J.issueExists issueKey)
+start key = do
+  exists <- runWithOptions (J.issueExists key)
   if exists then do
     active <- getActiveIssue
-    if isNothing active || (snd <$> active) /= Just issueKey then do
+    if isNothing active || (snd <$> active) /= Just key then do
       now <- liftIO getZonedTime
-      modify (<> [LogLine now (Started issueKey)])
-      return $ Just $ "Started working on " <> toS (toText issueKey)
-    else return $ Just $ "Already working on " <> toS (toText issueKey)
-  else throwError (toS (toText issueKey) <> " does not exists")
+      modify (<> [LogLine now (Started key)])
+      return $ Just $ "Started working on " <> toS (toText key)
+    else return $ Just $ "Already working on " <> toS (toText key)
+  else throwError (toS (toText key) <> " does not exists")
 
 stop :: CommandM (Maybe String)
 stop = do
   active <- getActiveIssue
   now <- liftIO getZonedTime
   case active of
-    Just (_, issueKey) -> do
+    Just (_, key) -> do
       modify (<> [LogLine now Stopped])
-      return $ Just $ "Stopped working on " <> toS (toText issueKey)
+      return $ Just $ "Stopped working on " <> toS (toText key)
     Nothing ->
       return $ Just "No active issue"
 
@@ -117,10 +112,10 @@ review = do
           F.format (totalTime workLog) F.<> ")" F.</$>
           F.indent 4 (F.format workLog)
         activeDoc Nothing = F.text "No active issue"
-        activeDoc (Just (t, issueKey)) =
+        activeDoc (Just (t, key)) =
           F.text "Active issue since" F.<+> F.format t F.</$>
           F.hardline F.<>
-          F.indent 4 (F.format issueKey)
+          F.indent 4 (F.format key)
         totalTime workLog = mconcat $ timeSpent <$> workLog
         discardInvalid :: [WorkLog] -> [WorkLog]
         discardInvalid = filter J.canBeBooked
