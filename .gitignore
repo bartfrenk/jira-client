@@ -1,3 +1,5 @@
 .dir-locals.el
 res/config.yaml
 res/test.sh
+TAGS
+
