@@ -15,7 +15,7 @@ To install the `jira-cli` executable in the local directory tree (by default in
 
     stack install
 
-Then fill in `res/_jira-cli.yaml` and copy to `~/.jira-cli.yaml`.
+Then fill in `res/_config.yaml` and copy to `~/.config.yaml`.
 
 For bash completion, run:
 
@@ -23,7 +23,6 @@ For bash completion, run:
 
 ## Running
 
-Supports command `log` and `search`. To get help on a command run:
+To get a list of commands, run:
 
-    jira-cli <command> --help
-
+    jira-cli --help
