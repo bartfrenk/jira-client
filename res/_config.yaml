@@ -1,6 +1,6 @@
 user: <user>
 password: <password>
-baseURL: <http://your-url/rest/api/2>
+baseURL: <http://www.company-url.com>
 defaultProject: <project-name>
 jql:
   active: >-
