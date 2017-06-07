@@ -131,7 +131,7 @@ replace old new = C8.map (\c -> if c == old then new else c)
 createURL :: Path -> Query -> EnvM ByteString
 createURL path query =
   let queryString = replace ' ' '+' $ urlDecode False (renderQuery True query)
-  in (<> path <> queryString) <$> reader baseURL
+  in (<> "/rest/api/2" <> path <> queryString) <$> reader baseURL
 
 -- TODO: pull in createURL
 get :: Options -> Path -> EnvM (Response L.ByteString)
@@ -161,7 +161,8 @@ issueExists issueKey = do
             404 -> return ()
             _   -> throwIO $ mkException req resp
 
-
+-- TODO: send duration string instead of seconds (gives better results in JIRA
+-- API)
 log :: WorkLog -> EnvM ByteString
 log WorkLog{..} = do
   path <- createURL ("/issue/" <> toS (toText issueKey) <> "/worklog") []
