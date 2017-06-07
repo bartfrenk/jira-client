@@ -9,6 +9,7 @@ import           Data.Aeson
 import           Data.Semigroup      ((<>))
 import           Data.String.Conv    (toS)
 import qualified Data.Text           as T
+import           Data.Time.Clock     (diffUTCTime)
 import           Data.Time.LocalTime
 import           GHC.Generics        (Generic)
 import           Prelude             hiding (Read)
@@ -30,8 +31,14 @@ instance Monoid TimeSpent where
 
 instance Show TimeSpent where
   show (TimeSpent s) = show s
+
 fromSeconds :: Integer -> TimeSpent
 fromSeconds = TimeSpent
+
+computeTimeSpent :: ZonedTime -> ZonedTime -> TimeSpent
+computeTimeSpent start finish =
+  let delta = diffUTCTime (zonedTimeToUTC finish) (zonedTimeToUTC start)
+  in fromSeconds $ truncate (realToFrac delta :: Double)
 
 -- |Parser to convert strings of the form '1h3d2m1s' to TimeSpent objects.
 durationStringParser :: Parsec T.Text u TimeSpent

@@ -14,14 +14,14 @@ import           Options
 
 data Command
   = Search J.JQL
-  | Log J.IssueKey J.TimeSpent
-  | Start J.IssueKey
+  | Log IssueKey TimeSpent
+  | Start IssueKey
   | Stop
   | Review
   | Book
 
 -- | If a number, read number and prepend prefix, otherwise read full issue key.
-readIssueKey :: Text -> ReadM J.IssueKey
+readIssueKey :: Text -> ReadM IssueKey
 readIssueKey prefix = fromText <$> txtParser
   where index = toS . show <$> (auto :: ReadM Int)
         txtParser = (prefix <>) <$> index <|> toS <$> str

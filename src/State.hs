@@ -12,13 +12,12 @@ import           Prelude             hiding (log, readFile, writeFile)
 import           System.Directory    (doesFileExist, getHomeDirectory)
 import           System.FilePath     ((</>))
 
+import           Concepts
 import           Core
-import qualified JIRA                as J
-import Concepts
 
 type Log = [LogLine]
 
-data LogLineType = Started J.IssueKey | Stopped
+data LogLineType = Started IssueKey | Stopped
   deriving (Eq, Show, Generic)
 
 instance FromJSON LogLineType
@@ -32,13 +31,23 @@ diffToSeconds t s =
   let delta = diffUTCTime (zonedTimeToUTC t) (zonedTimeToUTC s)
   in truncate (realToFrac delta :: Double)
 
-toWorkLog :: Log -> ([J.WorkLog], Log)
+toWorkLog :: Log -> ([WorkLog], Log)
 toWorkLog (LogLine s (Started key) : end@(LogLine t _) : rest) =
   let (wl, log) = toWorkLog (end:rest)
       sec = diffToSeconds t s
   in (WorkLog key (fromSeconds sec) s : wl, log)
 toWorkLog (_:rest) = toWorkLog rest
 toWorkLog [] = ([], [])
+
+nextWorkLogItem :: Log -> (Maybe WorkLog, Log)
+nextWorkLogItem (LogLine start (Started key) : end@(LogLine finish ty) : rest) =
+  let spent = computeTimeSpent start finish
+  in case ty of
+    Stopped   -> (Just $ WorkLog key spent start, rest)
+    Started _ -> (Just $ WorkLog key spent start, end:rest)
+nextWorkLogItem log@[LogLine _ (Started _)] = (Nothing, log)
+nextWorkLogItem (_:rest) = nextWorkLogItem rest
+nextWorkLogItem [] = (Nothing, [])
 
 instance FromJSON LogLine
 instance ToJSON LogLine

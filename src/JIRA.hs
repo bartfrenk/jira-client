@@ -14,10 +14,8 @@ module JIRA (runEnv,
              issueExists,
              formatIssue,
              log,
-             IssueKey,
-             TimeSpent(..),
+             canBeBooked,
              EnvM,
-             WorkLog(..),
              Env(..),
              Issue(..),
              JQL(..)) where
@@ -37,7 +35,6 @@ import           Data.Monoid
 import           Data.String.Conv
 import qualified Data.Text                     as T
 import           Data.Time.Format
-import           Data.Time.LocalTime           (zonedTimeToUTC)
 import           GHC.Generics
 import           Network.HTTP.Client           (HttpException (..),
                                                 HttpExceptionContent (..))
@@ -163,12 +160,16 @@ issueExists issueKey = do
 
 -- TODO: send duration string instead of seconds (gives better results in JIRA
 -- API)
-log :: WorkLog -> EnvM ByteString
+log :: WorkLog -> EnvM ()
 log WorkLog{..} = do
   path <- createURL ("/issue/" <> toS (toText issueKey) <> "/worklog") []
-  post path payload
+  _ <- post path payload
+  return ()
   where
     payload = encode $ Object $
       M.fromList [("started", toJSON $ formatTime defaultTimeLocale formatStr started),
                   ("timeSpentSeconds", toJSON $ toSeconds timeSpent)]
     formatStr = iso8601DateFormat (Just "%H:%M:%S.000%z")
+
+canBeBooked :: WorkLog -> Bool
+canBeBooked = (60 <=) . toSeconds . timeSpent

@@ -5,26 +5,29 @@
 
 module Run where
 
-import           Control.Monad        ((<=<))
+import           Control.Exception.Lifted
+import           Control.Monad            ((<=<))
 import           Control.Monad.Except
 import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Conduit
-import qualified Data.Conduit.List    as CL
-import qualified Data.Map.Strict      as Map
-import           Data.Maybe           (fromMaybe, isNothing)
-import           Data.Monoid          (mconcat)
-import           Data.Semigroup       ((<>))
-import           Data.String.Conv     (toS)
-import qualified Data.Text            as T
+import qualified Data.Conduit.List        as CL
+import qualified Data.Map.Strict          as Map
+import           Data.Maybe               (fromMaybe, isNothing)
+import           Data.Monoid              (mconcat)
+import           Data.Semigroup           ((<>))
+import           Data.String.Conv         (toS)
+import qualified Data.Text                as T
 import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.Time.LocalTime
-import           Prelude              hiding (log)
+import           Network.HTTP.Client      (HttpException)
+import           Prelude                  hiding (log)
+import           Prelude                  hiding (try)
 
 import           Concepts
-import qualified Format               as F
-import qualified JIRA                 as J
+import qualified Format                   as F
+import qualified JIRA                     as J
 import           Options
 import           State
 
@@ -40,12 +43,12 @@ runCommandM act opts =
 runWithOptions :: J.EnvM a -> CommandM a
 runWithOptions act = liftIO . J.runEnv act . makeEnv =<< ask
 
-log :: J.IssueKey -> J.TimeSpent -> CommandM (Maybe String)
+log :: IssueKey -> TimeSpent -> CommandM (Maybe String)
 log issueKey timeSpent = do
   now <- liftIO getZonedTime
   void $ runWithOptions (act now)
   return $ Just $ "Logged " <> toS (toDurationString timeSpent)
-  where act t = J.log $ J.WorkLog issueKey timeSpent t
+  where act t = J.log $ WorkLog issueKey timeSpent t
 
 search :: J.JQL -> CommandM (Maybe String)
 search jql = do
@@ -62,7 +65,7 @@ lookupQuery orig@(J.JQL t) =
 printer :: MonadIO m => Sink J.Issue m ()
 printer = CL.mapM_ (liftIO . putStrLn . toS . J.formatIssue)
 
-getActiveIssue :: (MonadState Log m) => m (Maybe (ZonedTime, J.IssueKey))
+getActiveIssue :: (MonadState Log m) => m (Maybe (ZonedTime, IssueKey))
 getActiveIssue = (toIssueKey <=< maybeLast) <$> get
   where toIssueKey (LogLine t (Started issueKey)) = Just (t, issueKey)
         toIssueKey _                              = Nothing
@@ -73,7 +76,7 @@ getActiveIssue = (toIssueKey <=< maybeLast) <$> get
 -- TODO: allow comments, or
 -- maybe categories of work: i.e. code-review, development
 -- TODO: nicer validation
-start :: J.IssueKey -> CommandM (Maybe String)
+start :: IssueKey -> CommandM (Maybe String)
 start issueKey = do
   exists <- runWithOptions (J.issueExists issueKey)
   if exists then do
@@ -96,10 +99,8 @@ stop = do
     Nothing ->
       return $ Just "No active issue"
 
--- TODO: Use pretty printing library for better overview
 --  - Show gaps
 --  - Show summary per day
---  - refactor: split out in 'putActiveIssue' and 'putWorkLog'
 review :: CommandM (Maybe String)
 review = do
   active <- getActiveIssue
@@ -121,14 +122,32 @@ review = do
           F.hardline F.<>
           F.indent 4 (F.format issueKey)
         totalTime workLog = mconcat $ timeSpent <$> workLog
+        discardInvalid :: [WorkLog] -> [WorkLog]
+        discardInvalid = filter J.canBeBooked
 
-discardInvalid :: [WorkLog] -> [WorkLog]
-discardInvalid = filter ((>= 60) . toSeconds . timeSpent)
-
--- TODO: this screws up when J.log fails
+-- TODO: can this be made less convoluted?
 book :: CommandM (Maybe String)
 book = do
-  (workLog, remainder) <- toWorkLog <$> get
-  put remainder
-  runWithOptions $ mapM_ J.log (discardInvalid workLog)
-  return Nothing
+  (workLogLine', rest) <- nextWorkLogItem <$> get
+  case workLogLine' of
+    Just workLogLine ->
+      if J.canBeBooked workLogLine
+        then do
+          result <- try (runWithOptions $ J.log workLogLine)
+          case result of
+            Left exc -> liftIO $ print (exc :: SomeException) >> return Nothing
+            Right _ -> do
+              put rest
+              liftIO $ putStrLn $ toS (successMsg workLogLine)
+              book
+        else do
+          liftIO $ putStrLn $ toS (invalidMsg workLogLine)
+          put rest
+          book
+    Nothing -> put rest >> return Nothing
+  where successMsg workLogLine =
+          "Booked " <> toDurationString (timeSpent workLogLine)
+                    <> " to " <> toText (issueKey workLogLine)
+        invalidMsg workLogLine =
+          "Discarded " <> toDurationString (timeSpent workLogLine)
+                       <> " for " <> toText (issueKey workLogLine)
