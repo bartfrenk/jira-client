@@ -15,15 +15,16 @@ import           GHC.Generics        (Generic)
 import           Prelude             hiding (Read)
 import           Text.Parsec
 
+import           Orphans             ()
 import           Utils               (breakdown)
 
 data WorkLog = WorkLog
   { issueKey  :: IssueKey
   , timeSpent :: TimeSpent
   , started   :: ZonedTime
-  } deriving (Show, Generic)
+  } deriving (Show, Generic, Eq)
 
-newtype TimeSpent = TimeSpent { toSeconds :: Integer }
+newtype TimeSpent = TimeSpent { toSeconds :: Integer } deriving (Eq)
 
 instance Monoid TimeSpent where
   mempty = TimeSpent 0
