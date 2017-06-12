@@ -113,22 +113,25 @@ review = do
   F.putDoc $
     activeDoc active F.</$>
     F.hardline F.<>
-    workLogDoc (discardInvalid workLog) F.</$>
+    workLogDoc workLog F.</$>
     F.hardline
   return Nothing
   where workLogDoc [] = F.text "Work log is empty"
         workLogDoc workLog =
           F.text "Work log to commit (" F.<>
-          F.format (totalTime workLog) F.<> ")" F.</$>
-          F.indent 4 (F.format workLog)
+          F.green (F.format (totalTime workLog)) F.<> ")" F.</$>
+          F.indent 4 (formatWorkLog workLog)
         activeDoc Nothing = F.text "No active issue"
         activeDoc (Just (t, key)) =
           F.text "Active issue since" F.<+> F.format t F.</$>
           F.hardline F.<>
           F.indent 4 (F.format key)
         totalTime workLog = mconcat $ timeSpent <$> workLog
-        discardInvalid :: [WorkLog] -> [WorkLog]
-        discardInvalid = filter J.canBeBooked
+        formatWorkLog workLog' =
+          foldl (F.</$>) F.empty (formatWorkLogItem `map` workLog')
+        formatWorkLogItem item =
+          let fmt = F.format item
+          in if J.canBeBooked item then F.green fmt else F.red fmt
 
 -- TODO: can this be made less convoluted?
 book :: CommandM (Maybe String)
