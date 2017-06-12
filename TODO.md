@@ -5,6 +5,14 @@
 
 - Add functionality to see work log for tickets in search result
 - See epic in ticket search results
+- Allow starting tasks in the past
+- Allow aliases for tickets, e.g. other, standup, ..., show aliases in 'review'
+  overview
+- Tab completion for aliases
+
+```
+jira-cli start standup -o 10m
+```
 
 ## Improvements
 
