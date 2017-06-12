@@ -79,15 +79,15 @@ start key offset' = do
     active <- getActiveIssue
     if isNothing active || (snd <$> active) /= Just key then do
       now <- liftIO getZonedTime
-      let t = applyOffsetToZonedTime now offset'
+      let t = applyOffsetToZonedTime offset' now
       modify (<> [LogLine t (Started key)])
       return $ Just $ "Started working on " <> toS (toText key)
     else return $ Just $ "Already working on " <> toS (toText key)
   else throwError (toS (toText key) <> " does not exists")
 
-applyOffsetToZonedTime :: ZonedTime -> Maybe TimeOffset -> ZonedTime
-applyOffsetToZonedTime zt Nothing = zt
-applyOffsetToZonedTime zt@(ZonedTime _ tz) (Just offset) =
+applyOffsetToZonedTime :: Maybe TimeOffset -> ZonedTime -> ZonedTime
+applyOffsetToZonedTime Nothing zt = zt
+applyOffsetToZonedTime (Just offset) zt@(ZonedTime _ tz) =
   let utcTime = zonedTimeToUTC zt
       diff = fromInteger $ toSeconds offset
   in utcToZonedTime tz (addUTCTime diff utcTime)
@@ -98,20 +98,19 @@ stop offset' = do
   now <- liftIO getZonedTime
   case active of
     Just (_, key) -> do
-      let t = applyOffsetToZonedTime now offset'
+      let t = applyOffsetToZonedTime offset' now
       modify (<> [LogLine t Stopped])
       return $ Just $ "Stopped working on " <> toS (toText key)
     Nothing ->
       return $ Just "No active issue"
 
---  - Show gaps
---  - Show summary per day
 review :: CommandM (Maybe String)
 review = do
   active <- getActiveIssue
   (workLog, _) <- toWorkLog <$> get
+  now <- liftIO getZonedTime
   F.putDoc $
-    activeDoc active F.</$>
+    activeDoc active now F.</$>
     F.hardline F.<>
     workLogDoc workLog F.</$>
     F.hardline
@@ -119,19 +118,19 @@ review = do
   where workLogDoc [] = F.text "Work log is empty"
         workLogDoc workLog =
           F.text "Work log to commit (" F.<>
-          F.green (F.format (totalTime workLog)) F.<> ")" F.</$>
+          F.format (totalTime workLog) F.<> ")" F.</$>
           F.indent 4 (formatWorkLog workLog)
-        activeDoc Nothing = F.text "No active issue"
-        activeDoc (Just (t, key)) =
-          F.text "Active issue since" F.<+> F.format t F.</$>
+        activeDoc Nothing _ = F.text "No active issue"
+        activeDoc (Just (t, key)) now =
+          F.text "Active issue" F.</$>
           F.hardline F.<>
-          F.indent 4 (F.format key)
+          F.indent 4 (formatWorkLogItem id $ createWorkLog key t now)
         totalTime workLog = mconcat $ timeSpent <$> workLog
         formatWorkLog workLog' =
-          foldl (F.</$>) F.empty (formatWorkLogItem `map` workLog')
-        formatWorkLogItem item =
+          foldl (F.</$>) F.empty (formatWorkLogItem F.green `map` workLog')
+        formatWorkLogItem good item =
           let fmt = F.format item
-          in if J.canBeBooked item then F.green fmt else F.red fmt
+          in if J.canBeBooked item then good fmt else F.red fmt
 
 -- TODO: can this be made less convoluted?
 book :: CommandM (Maybe String)

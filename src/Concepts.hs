@@ -24,6 +24,10 @@ data WorkLog = WorkLog
   , started   :: ZonedTime
   } deriving (Show, Generic, Eq)
 
+createWorkLog :: IssueKey -> ZonedTime -> ZonedTime -> WorkLog
+createWorkLog key start finish =
+  WorkLog key (computeTimeSpent start finish) start
+
 newtype TimeSpent = TimeSpent { toSeconds :: Integer } deriving (Eq)
 
 type TimeOffset = TimeSpent

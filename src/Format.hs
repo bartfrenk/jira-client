@@ -38,4 +38,4 @@ instance Format WorkLog where
 
 instance Format ZonedTime where
   format = text . formatTime defaultTimeLocale formatStr
-    where formatStr = iso8601DateFormat (Just "%H:%M")
+    where formatStr = "%Y-%m-%d %H:%M"
