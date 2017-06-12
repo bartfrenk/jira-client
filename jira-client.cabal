@@ -25,6 +25,7 @@ library
                        Run
                        State
                        Concepts
+                       Paths_jira_client
   build-depends:       aeson
                      , aeson-pretty
                      , ansi-wl-pprint

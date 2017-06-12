@@ -20,6 +20,7 @@ data Command
   | Stop (Maybe TimeOffset)
   | Review
   | Book
+  | Version
 
 -- | If a number, read number and prepend prefix, otherwise read full issue key.
 readIssueKey :: Text -> ReadM IssueKey
@@ -71,7 +72,10 @@ parseCommand opts = hsubparser $
   command "book"   (parseBook `withInfo` "Book local worklog on JIRA")
   where prefix = defaultProject opts <> "-"
 
+parseVersionFlag :: Parser Command
+parseVersionFlag = flag' Version (long "version" <> help "Show version")
+
 runParser :: Options -> [String] -> IO Command
 runParser opts args = handleParseResult $ execParserPure defaultPrefs p args
-  where p = (helper <*> parseCommand opts) `info`
+  where p = (helper <*> parseVersionFlag <|> parseCommand opts) `info`
             (fullDesc <> progDesc "JIRA command line client")

@@ -16,9 +16,11 @@ import           Options
 import           Run
 import           State
 
+
 expand :: Ord a => Map a [a] -> [a] -> [a]
 expand m xs =
   xs >>= (\s -> Map.findWithDefault [s] s m)
+
 
 action :: Command -> CommandM (Maybe String)
 action (Search jql)             = search jql
@@ -27,6 +29,7 @@ action (Start issueKey offset') = start issueKey offset'
 action Review                   = review
 action (Stop offset')           = stop offset'
 action Book                     = book
+action Version                  = printVersion
 
 run :: Command -> Options -> IO (Either Failure (Maybe String))
 run cmd opts = do

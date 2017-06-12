@@ -19,7 +19,10 @@ import           Data.String.Conv         (toS)
 import qualified Data.Text                as T
 import           Data.Time.Clock          (addUTCTime)
 import           Data.Time.LocalTime
+import           Data.Version             (showVersion)
 import           Prelude                  hiding (log)
+
+import           Paths_jira_client        (version)
 
 import           Concepts
 import qualified Format                   as F
@@ -38,6 +41,9 @@ runCommandM act opts =
 
 runWithOptions :: J.EnvM a -> CommandM a
 runWithOptions act = liftIO . J.runEnv act . makeEnv =<< ask
+
+printVersion :: CommandM (Maybe String)
+printVersion = liftIO $ putStrLn (showVersion version) >> return Nothing
 
 log :: IssueKey -> TimeSpent -> CommandM (Maybe String)
 log key spent = do
