@@ -43,7 +43,7 @@ computeTimeSpent start finish =
   let delta = diffUTCTime (zonedTimeToUTC finish) (zonedTimeToUTC start)
   in fromSeconds $ truncate (realToFrac delta :: Double)
 
--- |Parser to convert strings of the form '1h3d2m1s' to TimeSpent objects.
+-- |Parser to convert strings of the form '1h3d2m1s' to seconds.
 durationStringParser :: Parsec T.Text u Integer
 durationStringParser = sum <$> sepBy1 seconds whitespace
   where number = read <$> many1 digit
@@ -72,12 +72,15 @@ toDurationString = T.concat . toDurationList
 
 -- |Maps to a list of the form [2d, 3h, 2m, 1s], without zero entries.
 toDurationList :: TimeSpent -> [T.Text]
-toDurationList (TimeSpent s) =
+toDurationList (TimeSpent s) | s >= 0 =
   let seconds = scanr (*) 1 [24, 60, 60]
       periods = ["d", "h", "m", "s"]
       perPeriod = breakdown s seconds
       nonZero = filter ((/= 0) . fst) $ zip perPeriod periods
   in (\(n, per) -> toS $ show n <> per) <$> nonZero
+toDurationList (TimeSpent s)
+  | s < 0 = "-" : toDurationList (TimeSpent (-s))
+toDurationList (TimeSpent _) = undefined -- does not happen
 
 newtype IssueKey = IssueKey T.Text
 
