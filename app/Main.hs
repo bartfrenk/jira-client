@@ -23,7 +23,7 @@ expand m xs =
 action :: Command -> CommandM (Maybe String)
 action (Search jql)             = search jql
 action (Log issueKey timeSpent) = log issueKey timeSpent
-action (Start issueKey)         = start issueKey
+action (Start issueKey offset') = start issueKey offset'
 action Review                   = review
 action Stop                     = stop
 action Book                     = book

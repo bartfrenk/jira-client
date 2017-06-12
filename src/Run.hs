@@ -17,6 +17,7 @@ import           Data.Monoid              (mconcat)
 import           Data.Semigroup           ((<>))
 import           Data.String.Conv         (toS)
 import qualified Data.Text                as T
+import           Data.Time.Clock          (addUTCTime)
 import           Data.Time.LocalTime
 import           Prelude                  hiding (log)
 
@@ -63,7 +64,7 @@ printer = CL.mapM_ (liftIO . putStrLn . toS . J.formatIssue)
 getActiveIssue :: (MonadState Log m) => m (Maybe (ZonedTime, IssueKey))
 getActiveIssue = (toIssueKey <=< maybeLast) <$> get
   where toIssueKey (LogLine t (Started key)) = Just (t, key)
-        toIssueKey _                              = Nothing
+        toIssueKey _                         = Nothing
         maybeLast :: Log -> Maybe LogLine
         maybeLast [] = Nothing
         maybeLast xs = Just $ last xs
@@ -71,17 +72,25 @@ getActiveIssue = (toIssueKey <=< maybeLast) <$> get
 -- TODO: allow comments, or
 -- maybe categories of work: i.e. code-review, development
 -- TODO: nicer validation
-start :: IssueKey -> CommandM (Maybe String)
-start key = do
+start :: IssueKey -> Maybe TimeOffset -> CommandM (Maybe String)
+start key offset' = do
   exists <- runWithOptions (J.issueExists key)
   if exists then do
     active <- getActiveIssue
     if isNothing active || (snd <$> active) /= Just key then do
       now <- liftIO getZonedTime
-      modify (<> [LogLine now (Started key)])
+      let t = applyOffsetToZonedTime now offset'
+      modify (<> [LogLine t (Started key)])
       return $ Just $ "Started working on " <> toS (toText key)
     else return $ Just $ "Already working on " <> toS (toText key)
   else throwError (toS (toText key) <> " does not exists")
+
+applyOffsetToZonedTime :: ZonedTime -> Maybe TimeOffset -> ZonedTime
+applyOffsetToZonedTime zt Nothing = zt
+applyOffsetToZonedTime zt@(ZonedTime _ tz) (Just offset) =
+  let utcTime = zonedTimeToUTC zt
+      diff = fromInteger $ toSeconds offset
+  in utcToZonedTime tz (addUTCTime diff utcTime)
 
 stop :: CommandM (Maybe String)
 stop = do

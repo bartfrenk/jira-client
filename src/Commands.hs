@@ -2,20 +2,21 @@
 
 module Commands where
 
-import           Data.Bifunctor             (first)
-import           Data.Semigroup             ((<>))
-import           Data.String.Conv           (toS)
-import           Data.Text                  hiding (index, words)
+import           Control.Applicative (optional)
+import           Data.Bifunctor      (first)
+import           Data.Semigroup      ((<>))
+import           Data.String.Conv    (toS)
+import           Data.Text           hiding (index, words)
 import           Options.Applicative
 
 import           Concepts
-import qualified JIRA                       as J
+import qualified JIRA                as J
 import           Options
 
 data Command
   = Search J.JQL
   | Log IssueKey TimeSpent
-  | Start IssueKey
+  | Start IssueKey (Maybe TimeOffset)
   | Stop
   | Review
   | Book
@@ -31,8 +32,11 @@ parseSearch = Search <$> argument jql (metavar "JQL-QUERY")
   where jql = J.JQL . toS <$> str
 
 parseStart :: Text -> Parser Command
-parseStart prefix =
-  Start <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
+parseStart prefix = Start
+  <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
+  <*> optional (option timeOffsetReader $ long "offset" <> metavar "TIME-OFFSET")
+  where timeOffsetReader = eitherReader $ \s ->
+          first show $ fromTimeOffsetString (toS s)
 
 parseReview :: Parser Command
 parseReview = pure Review

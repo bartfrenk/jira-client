@@ -26,6 +26,8 @@ data WorkLog = WorkLog
 
 newtype TimeSpent = TimeSpent { toSeconds :: Integer } deriving (Eq)
 
+type TimeOffset = TimeSpent
+
 instance Monoid TimeSpent where
   mempty = TimeSpent 0
   (TimeSpent s) `mappend` (TimeSpent t) = TimeSpent (s + t)
@@ -42,8 +44,8 @@ computeTimeSpent start finish =
   in fromSeconds $ truncate (realToFrac delta :: Double)
 
 -- |Parser to convert strings of the form '1h3d2m1s' to TimeSpent objects.
-durationStringParser :: Parsec T.Text u TimeSpent
-durationStringParser = TimeSpent . sum <$> sepBy1 seconds whitespace
+durationStringParser :: Parsec T.Text u Integer
+durationStringParser = sum <$> sepBy1 seconds whitespace
   where number = read <$> many1 digit
         seconds = countSeconds <$> number <*> oneOf ['d', 'h', 'm', 's']
         whitespace = many $ char ' '
@@ -57,7 +59,12 @@ durationStringParser = TimeSpent . sum <$> sepBy1 seconds whitespace
 -- |Reads from a string of the form '1h3d2m1s' ignoring spaces, and summing
 -- duplicate entries.
 fromDurationString :: T.Text -> Either ParseError TimeSpent
-fromDurationString = parse durationStringParser ""
+fromDurationString = parse (fromSeconds <$> durationStringParser) ""
+
+fromTimeOffsetString :: T.Text -> Either ParseError TimeOffset
+fromTimeOffsetString = parse (fromSeconds <$> timeOffsetStringParser) ""
+  where timeOffsetStringParser = (*) <$> minus <*> durationStringParser
+        minus = option 1 (char '-' >> return (-1))
 
 -- |Maps to a string of the form '1h3d2m1s'.
 toDurationString :: TimeSpent -> T.Text
