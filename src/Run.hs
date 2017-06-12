@@ -92,13 +92,14 @@ applyOffsetToZonedTime zt@(ZonedTime _ tz) (Just offset) =
       diff = fromInteger $ toSeconds offset
   in utcToZonedTime tz (addUTCTime diff utcTime)
 
-stop :: CommandM (Maybe String)
-stop = do
+stop :: Maybe TimeOffset -> CommandM (Maybe String)
+stop offset' = do
   active <- getActiveIssue
   now <- liftIO getZonedTime
   case active of
     Just (_, key) -> do
-      modify (<> [LogLine now Stopped])
+      let t = applyOffsetToZonedTime now offset'
+      modify (<> [LogLine t Stopped])
       return $ Just $ "Stopped working on " <> toS (toText key)
     Nothing ->
       return $ Just "No active issue"

@@ -17,7 +17,7 @@ data Command
   = Search J.JQL
   | Log IssueKey TimeSpent
   | Start IssueKey (Maybe TimeOffset)
-  | Stop
+  | Stop (Maybe TimeOffset)
   | Review
   | Book
 
@@ -34,7 +34,11 @@ parseSearch = Search <$> argument jql (metavar "JQL-QUERY")
 parseStart :: Text -> Parser Command
 parseStart prefix = Start
   <$> argument (readIssueKey prefix) (metavar "ISSUE-KEY")
-  <*> optional (option timeOffsetReader $ long "offset" <> metavar "TIME-OFFSET")
+  <*> timeOffsetOption
+
+timeOffsetOption :: Parser (Maybe TimeOffset)
+timeOffsetOption =
+  optional (option timeOffsetReader $ long "offset" <> metavar "TIME-OFFSET")
   where timeOffsetReader = eitherReader $ \s ->
           first show $ fromTimeOffsetString (toS s)
 
@@ -42,7 +46,7 @@ parseReview :: Parser Command
 parseReview = pure Review
 
 parseStop :: Parser Command
-parseStop = pure Stop
+parseStop = Stop <$> timeOffsetOption
 
 parseBook :: Parser Command
 parseBook = pure Book

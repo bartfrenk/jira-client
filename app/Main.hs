@@ -25,7 +25,7 @@ action (Search jql)             = search jql
 action (Log issueKey timeSpent) = log issueKey timeSpent
 action (Start issueKey offset') = start issueKey offset'
 action Review                   = review
-action Stop                     = stop
+action (Stop offset')           = stop offset'
 action Book                     = book
 
 run :: Command -> Options -> IO (Either Failure (Maybe String))
