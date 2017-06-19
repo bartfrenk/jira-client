@@ -17,6 +17,7 @@ import           Prelude             hiding (readFile)
 import           System.Directory    (getHomeDirectory)
 import           System.FilePath     ((</>))
 
+import qualified Concepts as C
 import           Core
 import qualified JIRA                as J
 
@@ -25,6 +26,7 @@ data Options = Options
   , password       :: Text
   , user           :: Text
   , defaultProject :: Text
+  , issues         :: M.Map Text C.IssueKey
   , queries        :: M.Map Text J.JQL
   , aliases        :: M.Map String [String]
   } deriving (Eq, Show)
@@ -35,6 +37,7 @@ instance YAML.FromJSON Options where
     <*> v .: "password"
     <*> v .: "user"
     <*> v .: "defaultProject"
+    <*> v .: "issues"
     <*> v .: "jql"
     <*> (words <$>) `fmap` (v .: "aliases")
 
