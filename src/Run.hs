@@ -11,7 +11,7 @@ import           Control.Monad.Reader
 import           Control.Monad.State
 import           Data.Conduit
 import qualified Data.Conduit.List        as CL
-import qualified Data.Map.Strict          as Map
+import qualified Data.Map.Strict          as M
 import           Data.Maybe               (fromMaybe, isNothing)
 import           Data.Monoid              (mconcat)
 import           Data.Semigroup           ((<>))
@@ -61,7 +61,7 @@ search jql = do
 lookupQuery :: MonadReader Options m => J.JQL -> m J.JQL
 lookupQuery orig@(J.JQL t) =
   case T.split (== ':') t of
-    ["jql", key] -> fromMaybe orig . Map.lookup key <$> reader queries
+    ["jql", key] -> fromMaybe orig . M.lookup key <$> reader queries
     _            -> return orig
 
 printer :: MonadIO m => Sink J.Issue m ()
@@ -115,28 +115,36 @@ review = do
   active <- getActiveIssue
   (workLog, _) <- toWorkLog <$> get
   now <- liftIO getZonedTime
+  revIssues <- reader reverseIssues
   F.putDoc $
-    activeDoc active now F.</$>
+    activeDoc revIssues active now F.</$>
     F.hardline F.<>
-    workLogDoc workLog F.</$>
+    workLogDoc revIssues workLog F.</$>
     F.hardline
   return Nothing
-  where workLogDoc [] = F.text "Work log is empty"
-        workLogDoc workLog =
+  where workLogDoc _ [] = F.text "Work log is empty"
+        workLogDoc revIssues workLog =
           F.text "Work log to commit (" F.<>
           F.format (totalTime workLog) F.<> ")" F.</$>
-          F.indent 4 (formatWorkLog workLog)
-        activeDoc Nothing _ = F.text "No active issue"
-        activeDoc (Just (t, key)) now =
+          F.indent 4 (formatWorkLog revIssues workLog)
+        activeDoc _ Nothing _ = F.text "No active issue"
+        activeDoc revIssues (Just (t, key)) now =
           F.text "Active issue" F.</$>
           F.hardline F.<>
-          F.indent 4 (formatWorkLogItem id $ createWorkLog key t now)
+          F.indent 4 (formatWorkLogItem revIssues id $ createWorkLog key t now)
         totalTime workLog = mconcat $ timeSpent <$> workLog
-        formatWorkLog workLog' =
-          foldl (F.</$>) F.empty (formatWorkLogItem F.green `map` workLog')
-        formatWorkLogItem good item =
+        formatWorkLog revIssues workLog' =
+          foldl (F.</$>)
+            F.empty (formatWorkLogItem revIssues F.green `map` workLog')
+        formatWorkLogItem revIssues good item =
           let fmt = F.format item
-          in if J.canBeBooked item then good fmt else F.red fmt
+              line = case M.lookup (issueKey item) revIssues of
+                Just [] -> fmt
+                Just labels -> fmt F.<||> formatLabels labels
+                Nothing -> fmt
+          in if J.canBeBooked item then good line else F.red line
+        formatLabels :: [T.Text] -> F.Doc
+        formatLabels labels = F.text $ toS (T.unwords labels)
 
 -- TODO: can this be made less convoluted?
 book :: CommandM (Maybe String)

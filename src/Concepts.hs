@@ -86,7 +86,7 @@ toDurationList (TimeSpent s)
   | s < 0 = "-" : toDurationList (TimeSpent (-s))
 toDurationList (TimeSpent _) = undefined -- does not happen
 
-newtype IssueKey = IssueKey T.Text
+newtype IssueKey = IssueKey T.Text deriving Ord
 
 instance Show IssueKey where
   show (IssueKey txt) = toS $ T.toUpper txt

@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards   #-}
 module Options (Options(..),
                 loadOptions,
+                reverseIssues,
                 makeEnv) where
 
 import           Control.Exception
@@ -30,6 +31,13 @@ data Options = Options
   , queries        :: M.Map Text J.JQL
   , aliases        :: M.Map String [String]
   } deriving (Eq, Show)
+
+invert :: (Ord k, Ord v) => M.Map k [v] -> M.Map v [k]
+invert m = M.fromListWith (++) pairs
+    where pairs = [(v, [k]) | (k, vs) <- M.toList m, v <- vs]
+
+reverseIssues :: Options -> M.Map C.IssueKey [Text]
+reverseIssues = invert . fmap return . issues
 
 instance YAML.FromJSON Options where
   parseJSON = withObject "Config" $ \v -> Options
