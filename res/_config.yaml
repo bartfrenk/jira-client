@@ -2,6 +2,8 @@ user: <user>
 password: <password>
 baseURL: <http://www.company-url.com>
 defaultProject: <project-name>
+issues:
+  plan: <project-name>-1
 jql:
   active: >-
     sprint in openSprints()
