@@ -29,6 +29,7 @@ action (Start issueKey offset') = start issueKey offset'
 action Review                   = review
 action (Stop offset')           = stop offset'
 action Book                     = book
+action ListConfig               = listConfig
 action Version                  = printVersion
 
 run :: Command -> Options -> IO (Either Failure (Maybe String))

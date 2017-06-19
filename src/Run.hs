@@ -172,3 +172,19 @@ book = do
         invalidMsg workLogLine =
           "Discarded " <> toDurationString (timeSpent workLogLine)
                        <> " for " <> toText (issueKey workLogLine)
+
+listConfig :: CommandM (Maybe String)
+listConfig = do
+  issueAliases <- M.toList <$> reader issues
+  liftIO $ F.putDoc $
+    issueAliasesDoc issueAliases F.</$>
+    F.hardline
+  return Nothing
+  where
+    issueAliasesDoc issueAliases =
+      F.text "Fixed issues" F.</$>
+      F.indent 4 (formatIssueAliases issueAliases)
+    formatIssueAliases issueAliases =
+      foldl (F.</$>) F.empty (fmap formatAlias issueAliases)
+    formatAlias (alias, key) =
+      F.text (toS alias) F.<||> F.format key

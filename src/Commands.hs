@@ -23,6 +23,7 @@ data Command
   | Review
   | Book
   | Version
+  | ListConfig
 
 -- |If a number, read number and prepend prefix, otherwise read full issue key.
 readIssueKey :: Text -> ReadM IssueKey
@@ -66,6 +67,9 @@ parseStop = Stop <$> timeOffsetOption
 parseBook :: Parser Command
 parseBook = pure Book
 
+parseListConfig :: Parser Command
+parseListConfig = pure ListConfig
+
 parseLog :: Options -> Parser Command
 parseLog opts = Log
   <$> argument (parseIssueKey opts) (metavar "ISSUE-KEY")
@@ -86,7 +90,8 @@ parseCommand opts = hsubparser $
   command "start"  (parseStart opts `withInfo` "Start work on an issue") <>
   command "stop"   (parseStop `withInfo` "Stop work on active issue") <>
   command "review" (parseReview `withInfo` "Review logged work") <>
-  command "book"   (parseBook `withInfo` "Book local worklog on JIRA")
+  command "book"   (parseBook `withInfo` "Book local worklog on JIRA") <>
+  command "cfg"    (parseListConfig `withInfo` "List configuration")
 
 parseVersionFlag :: Parser Command
 parseVersionFlag = flag' Version (long "version" <> help "Show version")
