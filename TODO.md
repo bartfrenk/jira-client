@@ -5,14 +5,7 @@
 
 - Add functionality to see work log for tickets in search result
 - See epic in ticket search results
-- Allow starting tasks in the past
-- Allow aliases for tickets, e.g. other, standup, ..., show aliases in 'review'
-  overview
 - Tab completion for aliases
-
-```
-jira-cli start standup -o 10m
-```
 
 ## Improvements
 
@@ -25,3 +18,6 @@ jira-cli start standup -o 10m
 
 1. Add functionality to log work on tickets
 2. Split Main.hs into different modules
+3. Allow starting tasks in the past
+4. Allow aliases for tickets, e.g. other, standup, ..., show aliases in 'review'
+  overview
