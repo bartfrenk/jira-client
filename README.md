@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.org/bartfrenk/jira-client.svg?branch=master)](https://travis-ci.org/bartfrenk/jira-client)
 
+Deprecated in favor of [time-tracker](https://github.com/bartfrenk/time-tracker).
+
 # JIRA client
 
 JIRA command line time tracker written in Haskell.
